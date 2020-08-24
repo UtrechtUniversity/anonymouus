@@ -61,7 +61,7 @@ There is an issue with creating zip archives. Make sure you **run UUnonymous as 
 
 ### Inplace replacements vs. replacements in a copy
 
-UUnonymous is able to create a copy of the processed file-tree or replace it. The `substitute` method takes a mandatory source-path argument (path to a file, folder or zip-archive, either a string or a [Path](https://docs.python.org/3/library/pathlib.html#basic-use) object) and an optional target-path argument (again, a string or [Path](https://docs.python.org/3/library/pathlib.html#basic-use) object). The target **needs to refer to a folder**. The target-folder will be created if it doesn't exist.
+UUnonymous is able to create a copy of the processed file-tree or replace it. The `substitute` method takes a mandatory source-path argument (path to a file, folder or zip-archive, either a string or a [Path](https://docs.python.org/3/library/pathlib.html#basic-use) object) and an optional target-path argument (again, a string or [Path](https://docs.python.org/3/library/pathlib.html#basic-use) object). The target **needs to refer to a folder**, which can't be a sub-folder of the source-folder. The target-folder will be created if it doesn't exist.
 
 When the target argument is provided, UUnonymous will create a processed copy of the source into the target-folder. If the source is a single file, and the file path does not contain elements that will be replaced, and the target-folder is identical to the source folder, than the processed result will get a 'copy' extension to prevent overwriting.
 
@@ -84,5 +84,7 @@ anonymize_regex.substitute('/Users/casper/Desktop/my_file.json')
 ```
 
 ## Todo
+
+Fix the infinite loop that occurs when the source folder shares the same parent folder as the target folder
 
 Testing ;)

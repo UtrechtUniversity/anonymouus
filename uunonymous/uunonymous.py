@@ -35,7 +35,7 @@ class Anonymize:
         # substring-matching
         self.use_word_boundaries = use_word_boundaries
 
-        # the regular expression to locate id numbers
+        # the regular expression to find certain patterns
         if pattern != None:
             if self.use_word_boundaries == True:
                 pattern = r'\b{}\b'.format(pattern)
@@ -115,6 +115,10 @@ class Anonymize:
             # we will produce a copy
             self.copy = True
 
+            # check if target is not a subfolder of source
+            if source_path in target_path.parents:
+                raise RuntimeError('the target path can\'t be a subfolder of the source path')
+
             # target path must be a folder!
             if target_path.exists():
                 if target_path.is_file():
@@ -122,6 +126,8 @@ class Anonymize:
             else:
                 # folder doesn't exist, create it
                 self._make_dir(target_path)
+
+            
 
         # start traversing
         self._traverse_tree(source_path, target_path)
