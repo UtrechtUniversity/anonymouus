@@ -35,9 +35,27 @@ anonymize_zip = Anonymize('/Users/casper/Desktop/keys.csv', zip_format='gztar')
 
 When using a csv-file, UUnonymous will assume your file contains two columns: the left column contains the keywords which need to be replaced, the right column contains their substitutions. **Column headers are mandatory**, but don't have to follow a specific format.
 
-When using a dictionary only (absence of the `pattern` argument), the keys will be replaced by their values.
+It is possible to add a regular expression as keyword in the csv-file. Make sure they start with the prefix 'r#'. Example:
 
-Performance might be enhanced when your keywords can be generalized into regular expressions. Anynomize_UU will search these patterns and replace them instead of matching the entire dictionary/csv-file against file contents or file/folder-paths. Example:
+```
+r#ca.*?er, replacement_string
+```
+
+The key will be compiles as a regex and replace every match with 'replacement_string'.
+
+
+When using a dictionary only (absence of the `pattern` argument), the keys will be replaced by their values. Again, it is possible to use (compiled) regular expressions as keys. The expression will replace all matches with its value. Example:
+
+```
+anon = Anonymize(
+    {
+        'regular-key': 'replacement-1',
+        re.compile('ca.*?er'): 'replacement-2'
+    }
+)
+```
+
+Performance might be enhanced when your keywords can be generalized into a single regular expressions. UUnynomize will search these patterns and replace them instead of matching the entire dictionary/csv-file against file contents or file/folder-paths. Example:
 
 ```
 anonymize_regex = Anonymize(my_dict, pattern=r'[A-B]\d{4}')

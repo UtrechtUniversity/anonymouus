@@ -19,6 +19,9 @@ class Anonymize:
             zip_format: str='zip',
         ):
 
+        # expression behaviour modifiers
+        self.flags = flags
+
         # if there is no substitution dictionary then convert the csv 
         # substitution table into a dictionary
         if type(substitution_dict) is dict:
@@ -27,9 +30,6 @@ class Anonymize:
             self.substitution_dict = self._convert_csv_to_dict(
                 substitution_dict
             )
-
-        # expression behaviour modifiers
-        self.flags = flags
 
         # using word boundaries around pattern or dict keys, avoids
         # substring-matching
@@ -66,26 +66,38 @@ class Anonymize:
         '''Converts 2-column csv file into dictionary. Left
         column contains ids, right column contains substitutions.
         '''
+        # this nested function takes care of stripping, escaping and
+        # converting dict keys into regulare expressions
+        def process_key_value_pair(key_value_pair):
+            # convert to list
+            kvp = list(key_value_pair.values())
+            # get key and value
+            key = kvp[0].strip()
+            value = kvp[1].strip()
+            # if key starts with r# then this is a regex
+            if key.startswith('r#'):
+                key = re.compile(key[2:])
+            else:
+                # otherwise, escape key
+                key = re.escape(key)
+            # return
+            return (key, value)
+
         # read csv file
         reader = csv.DictReader(open(path_to_csv))
         # convert ordered dict into a plain dict, strip any white space
-        data = [
-            tuple([item.strip() for item in key_value_pair.values()]) 
-            for key_value_pair in reader
-        ]
-        # escape the keys, I want to do this in the previous line, but
-        # the code get's unreadable
-        data = [(re.escape(key), value) for (key, value) in data]
+        data = [process_key_value_pair(kvp) for kvp in reader]
+
         # return ordered dictionary
         return OrderedDict(data)
 
 
     def _reorder_dict(self):
         '''Re-order the substitution dictionary such that longest keys 
-        are first'''
+        are processed earlier, regex's come first'''
         new_dict = sorted(
             self.substitution_dict.items(), 
-            key=lambda t: len(t[0]), 
+            key=lambda t: len(t[0]) if type(t[0]) is str else 100000, 
             reverse=True
         )
         self.substitution_dict = OrderedDict(new_dict)
@@ -274,7 +286,10 @@ class Anonymize:
             # loop over dict keys, try to find them in string and replace them 
             # with their values
             for key, value in self.substitution_dict.items():
+                if type(key) is re.Pattern:
+                    key = key.pattern
                 string = re.sub(key, str(value), string, flags=self.flags)
+
         else:
             # identify patterns and substitute them with appropriate substitute
             string = self.pattern.sub(
