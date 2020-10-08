@@ -22,6 +22,10 @@ class Anonymize:
         # expression behaviour modifiers
         self.flags = flags
 
+        # using word boundaries around pattern or dict keys, avoids
+        # substring-matching
+        self.use_word_boundaries = use_word_boundaries
+
         # if there is no substitution dictionary then convert the csv 
         # substitution table into a dictionary
         if type(substitution_dict) is dict:
@@ -31,10 +35,8 @@ class Anonymize:
                 substitution_dict
             )
 
-        # using word boundaries around pattern or dict keys, avoids
-        # substring-matching
-        self.use_word_boundaries = use_word_boundaries
-
+        # Word-boundaries: let's add them here, it's a one time 
+        # overhead thing. Not the prettiest code.
         # the regular expression to find certain patterns
         if pattern != None:
             if self.use_word_boundaries == True:
@@ -49,10 +51,14 @@ class Anonymize:
             self._reorder_dict()
             # add word boundaries if requested
             if self.use_word_boundaries == True:
-                self.substitution_dict = dict([
-                    (r'\b{}\b'.format(key), value)
-                    for key, value in self.substitution_dict.items()
-                ])
+                replacement_list = []
+                for key, value in self.substitution_dict.items():
+                    if type(key) is not re.Pattern:
+                        key = r'\b{}\b'.format(key)
+                    else:
+                        key = re.compile(r'\b{}\b'.format(key.pattern))
+                    replacement_list.append((key, value))
+                self.substitution_dict = dict(replacement_list)
 
         # this is for processed zip archives
         self.zip_format = zip_format
@@ -337,6 +343,5 @@ class Anonymize:
     def _copy_file(self, source: Path, target: Path):
         if source != target:
             shutil.copy(source, target)
-
 
 

@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name='UUnonymous',
-    version='0.0.3',
+    version='0.0.4',
     description='A tool to substitue patterns/names in a file tree',
     long_description = long_description,
     long_description_content_type = "text/markdown",
