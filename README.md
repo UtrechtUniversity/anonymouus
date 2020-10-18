@@ -1,23 +1,23 @@
-# UUnonymous
+# anonymoUUs
 
-This description can be found [on GitHub here](https://github.com/UtrechtUniversity/uunonymous)
+This description can be found [on GitHub here](https://github.com/UtrechtUniversity/anonymouus)
 
-UUnonymous facilitates the replacement of keywords or regex-patterns within a file tree or zipped archive. It recursively traverses the tree, opens supported files and substitutes any found pattern or keyword with a replacement. Besides contents, UUnonymous will substitue keywords/patterns in file/folder-paths as well.
+anonymoUUs facilitates the replacement of keywords or regex-patterns within a file tree or zipped archive. It recursively traverses the tree, opens supported files and substitutes any found pattern or keyword with a replacement. Besides contents, anonymoUUs will substitue keywords/patterns in file/folder-paths as well.
 
 The result will be either a copied or replaced version of the original file-tree with all substitutions made.
 
-As of now, UUnonymous supports text-based files, like .txt, .html, .json and .csv. UTF-8 encoding is assumed. Besides text files, UUnonymous is also able to handle (nested) zip archives. These archives will be unpacked in a temp folder, processed and zipped again.
+As of now, anonymoUUs supports text-based files, like .txt, .html, .json and .csv. UTF-8 encoding is assumed. Besides text files, anonymoUUs is also able to handle (nested) zip archives. These archives will be unpacked in a temp folder, processed and zipped again.
 
 ## Installation
 
-`$ pip install UUnonymous`
+`$ pip install anonymoUUs`
 
 ## Usage
 
 Import the Anomymize class in your code and create an anonymization object like this:
 
 ```
-from uunonymous import Anonymize
+from anonymoUUs import Anonymize
 
 # refer to csv files in which keywords and substitutions are paired
 anonymize_csv = Anonymize('/Users/casper/Desktop/keys.csv')
@@ -33,7 +33,7 @@ anonymize_dict = Anonymize(my_dict)
 anonymize_zip = Anonymize('/Users/casper/Desktop/keys.csv', zip_format='gztar')
 ```
 
-When using a csv-file, UUnonymous will assume your file contains two columns: the left column contains the keywords which need to be replaced, the right column contains their substitutions. **Column headers are mandatory**, but don't have to follow a specific format.
+When using a csv-file, anonymoUUs will assume your file contains two columns: the left column contains the keywords which need to be replaced, the right column contains their substitutions. **Column headers are mandatory**, but don't have to follow a specific format.
 
 It is possible to add a regular expression as keyword in the csv-file. Make sure they start with the prefix 'r#'. Example:
 
@@ -75,13 +75,13 @@ anonymize_regex = Anonymize(my_dict, use_word_boundaries=True)
 
 ### Windows usage
 
-There is an issue with creating zip archives. Make sure you **run UUnonymous as administrator**.
+There is an issue with creating zip archives. Make sure you **run anonymoUUs as administrator**.
 
 ### Inplace replacements vs. replacements in a copy
 
-UUnonymous is able to create a copy of the processed file-tree or replace it. The `substitute` method takes a mandatory source-path argument (path to a file, folder or zip-archive, either a string or a [Path](https://docs.python.org/3/library/pathlib.html#basic-use) object) and an optional target-path argument (again, a string or [Path](https://docs.python.org/3/library/pathlib.html#basic-use) object). The target **needs to refer to a folder**, which can't be a sub-folder of the source-folder. The target-folder will be created if it doesn't exist.
+anonymoUUs is able to create a copy of the processed file-tree or replace it. The `substitute` method takes a mandatory source-path argument (path to a file, folder or zip-archive, either a string or a [Path](https://docs.python.org/3/library/pathlib.html#basic-use) object) and an optional target-path argument (again, a string or [Path](https://docs.python.org/3/library/pathlib.html#basic-use) object). The target **needs to refer to a folder**, which can't be a sub-folder of the source-folder. The target-folder will be created if it doesn't exist.
 
-When the target argument is provided, UUnonymous will create a processed copy of the source into the target-folder. If the source is a single file, and the file path does not contain elements that will be replaced, and the target-folder is identical to the source folder, than the processed result will get a 'copy' extension to prevent overwriting.
+When the target argument is provided, anonymoUUs will create a processed copy of the source into the target-folder. If the source is a single file, and the file path does not contain elements that will be replaced, and the target-folder is identical to the source folder, than the processed result will get a 'copy' extension to prevent overwriting.
 
 When the target argument is omitted, the source will be overwritten by a processed version of it:
 

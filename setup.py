@@ -4,16 +4,16 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setup(
-    name='UUnonymous',
+    name='anonymoUUs',
     version='0.0.4',
     description='A tool to substitue patterns/names in a file tree',
     long_description = long_description,
     long_description_content_type = "text/markdown",
-    url='https://github.com/UtrechtUniversity/uunonymous',
+    url='https://github.com/UtrechtUniversity/anonymouus',
     author='C.S. Kaandorp',
     author_email='c.s.kaandorp@uu.nl',
     license='MIT',
-    packages=['uunonymous'],
+    packages=['anonymouus'],
     python_requires = '>=3.6',
     zip_safe=False
 )
