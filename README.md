@@ -79,7 +79,7 @@ def replace(match, **kwargs):
         result = 'special-replacement'
     return result
 
-anon = Anonymize(foo, pattern=r'\d{4}', threshold=1000)
+anon = Anonymize(replace, pattern=r'\d{4}', threshold=1000)
 anon.substitute(
     '/Users/casperkaandorp/Desktop/test.json', 
     '/Users/casperkaandorp/Desktop/result-folder'
