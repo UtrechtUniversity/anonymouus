@@ -5,18 +5,19 @@ import tempfile
 
 from collections import OrderedDict
 from pathlib import Path, PosixPath
-from typing import Union
+from typing import Callable, Union
 
 
 class Anonymize:
 
     def __init__(
-            self, 
-            substitution_dict: Union[dict, Path],
+            self,
+            mapping: Union[dict, Path, Callable],
             pattern: str=None,
             flags=0,
             use_word_boundaries: bool=False,
             zip_format: str='zip',
+            **kwargs
         ):
 
         # expression behaviour modifiers
@@ -26,39 +27,54 @@ class Anonymize:
         # substring-matching
         self.use_word_boundaries = use_word_boundaries
 
-        # if there is no substitution dictionary then convert the csv 
+        self.mapping = None
+        self.mapping_is_function = False
+        # if there is no substitution dictionary then convert the csv
         # substitution table into a dictionary
-        if type(substitution_dict) is dict:
-            self.substitution_dict = substitution_dict
+        if type(mapping) is dict:
+            self.mapping = mapping
+
+        elif type(mapping) in [Path, str] :
+            self.mapping = self._convert_csv_to_dict(mapping)
+        elif callable(mapping):
+            # raise an error if the callable is not accompanied by a
+            # pattern
+            if pattern is None:
+                raise ValueError('A mapping function can only be used in conjunction with a pattern')
+            else:
+                self.mapping = mapping
+                self.mapping_is_function = True
+                self.kwargs = kwargs
+
         else:
-            self.substitution_dict = self._convert_csv_to_dict(
-                substitution_dict
-            )
+            raise TypeError('mapping must be a dictionary, path or function')
 
         # Word-boundaries: let's add them here, it's a one time 
         # overhead thing. Not the prettiest code.
         # the regular expression to find certain patterns
-        if pattern != None:
-            if self.use_word_boundaries == True:
+        if pattern is not None:
+            if self.use_word_boundaries is True:
                 pattern = r'\b{}\b'.format(pattern)
             self.pattern = re.compile(pattern, flags=self.flags)
         else:
             self.pattern = False
-            # re-order the OrderedDict such that the longest
-            # keys are first: ensures that shorter versions of keys
-            # will not be substituted first if bigger substitutions 
-            # are possible
-            self._reorder_dict()
-            # add word boundaries if requested
-            if self.use_word_boundaries == True:
-                replacement_list = []
-                for key, value in self.substitution_dict.items():
-                    if type(key) is not re.Pattern:
-                        key = r'\b{}\b'.format(key)
-                    else:
-                        key = re.compile(r'\b{}\b'.format(key.pattern))
-                    replacement_list.append((key, value))
-                self.substitution_dict = dict(replacement_list)
+
+            if not self.mapping_is_function:
+                # re-order the OrderedDict such that the longest
+                # keys are first: ensures that shorter versions of keys
+                # will not be substituted first if bigger substitutions 
+                # are possible
+                self._reorder_dict()
+                # add word boundaries if requested
+                if self.use_word_boundaries == True:
+                    replacement_list = []
+                    for key, value in self.mapping.items():
+                        if type(key) is not re.Pattern:
+                            key = r'\b{}\b'.format(key)
+                        else:
+                            key = re.compile(r'\b{}\b'.format(key.pattern))
+                        replacement_list.append((key, value))
+                    self.mapping = dict(replacement_list)
 
         # this is for processed zip archives
         self.zip_format = zip_format
@@ -102,11 +118,11 @@ class Anonymize:
         '''Re-order the substitution dictionary such that longest keys 
         are processed earlier, regex's come first'''
         new_dict = sorted(
-            self.substitution_dict.items(), 
+            self.mapping.items(), 
             key=lambda t: len(t[0]) if type(t[0]) is str else 100000, 
             reverse=True
         )
-        self.substitution_dict = OrderedDict(new_dict)
+        self.mapping = OrderedDict(new_dict)
 
 
     def substitute(self, 
@@ -206,7 +222,8 @@ class Anonymize:
             self._process_unknown_file_type(source, target)
 
 
-    def _process_target(self,
+    def _process_target(
+        self,
         source: Path,
         target: Path
         ):
@@ -222,11 +239,11 @@ class Anonymize:
         return new_target
 
 
-    def _process_txt_based_file(self,
+    def _process_txt_based_file(
+        self,
         source: Path,
         target: Path
         ):
-
         # read contents
         contents = self._read_file(source)
         # substitute
@@ -237,12 +254,11 @@ class Anonymize:
         # write processed file
         self._write_file(target, substituted_contents)
 
-
-    def _process_unknown_file_type(self,
+    def _process_unknown_file_type(
+        self,
         source: Path,
         target: Path
         ):
-
         if self.copy == False:
             # just rename the file
             self._rename_file_or_folder(source, target)
@@ -250,13 +266,12 @@ class Anonymize:
             # copy source into target
             self._copy_file(source, target)
 
-
-    def _process_zip_file(self, 
-        source: Path,
-        target: Path,
-        extension: str
+    def _process_zip_file(
+            self,
+            source: Path,
+            target: Path,
+            extension: str
         ):
-
         # create a temp folder to extract to
         with tempfile.TemporaryDirectory() as tmp_folder:
             # extract our archive
@@ -280,40 +295,43 @@ class Anonymize:
             if self.copy == False:
                 self._remove_file(source)
 
-
     def _substitute_ids(self, string: str):
         '''Heart of this class: all matches of the regular expression will be
         substituted for the corresponding value in the id-dictionary'''
-        if self.pattern == False:
+        if self.pattern is False:
             #
             # This might be more efficient:
             # https://en.wikipedia.org/wiki/Aho%E2%80%93Corasick_algorithm
             #
             # loop over dict keys, try to find them in string and replace them 
             # with their values
-            for key, value in self.substitution_dict.items():
+            for key, value in self.mapping.items():
                 if type(key) is re.Pattern:
                     key = key.pattern
                 string = re.sub(key, str(value), string, flags=self.flags)
 
         else:
-            # identify patterns and substitute them with appropriate substitute
-            string = self.pattern.sub(
-                lambda match: self.substitution_dict.get(
-                    match.group(),
-                    match.group()
-                ),
-                string
-            )
+            
+            if self.mapping_is_function:
+                # if there is a mapping function involved, we will use that
+                string = self.pattern.sub(
+                    lambda match: self.mapping(match.group(), **self.kwargs),
+                    string
+                )
+            else:
+                # identify patterns and substitute them with appropriate substitute
+                string = self.pattern.sub(
+                    lambda match: self.mapping.get(
+                        match.group(), 
+                        match.group()
+                    ),
+                    string
+                )
         return string
 
-
     # FILE OPERATIONS, OVERRIDE THESE IF APPLICABLE
-
-
     def _make_dir(self, path: Path):
         path.mkdir(parents=True, exist_ok=True)
-
 
     def _read_file(self, source: Path):
         f = open(source, 'r', encoding='utf-8')
@@ -321,27 +339,21 @@ class Anonymize:
         f.close()
         return contents
 
-
     def _write_file(self, path: Path, contents: str):
         f = open(path, 'w', encoding='utf-8')
         f.writelines(contents)
         f.close()
 
-
     def _remove_file(self, path: Path):
         path.unlink()
 
-    
     def _remove_folder(self, path: Path):
         shutil.rmtree(path)
-
 
     def _rename_file_or_folder(self, source: Path, target: Path):
         source.replace(target)
 
-
     def _copy_file(self, source: Path, target: Path):
         if source != target:
             shutil.copy(source, target)
-
 

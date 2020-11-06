@@ -14,9 +14,16 @@ As of now, anonymoUUs supports text-based files, like .txt, .html, .json and .cs
 
 ## Usage
 
+In order to replace words or patterns you need a replacement-mapping in the form of:
+1. a dictionary - the keys will be replaced by the values
+2. a csv file - a csv file will be converted in a dictionary, the first column provides keys, the second value provides values 
+3. a function - a replacement function can be passed if a pattern is used. The function takes a found match and should return its replacement. The function must have at least one input argument.
+
+### Example of replacement with a dictionary
+
 Import the Anomymize class in your code and create an anonymization object like this:
 
-```
+```python
 from anonymoUUs import Anonymize
 
 # refer to csv files in which keywords and substitutions are paired
@@ -28,9 +35,24 @@ my_dict = {
     'B9876': 'bbbb',
 }
 anonymize_dict = Anonymize(my_dict)
+```
 
+Putting regular expression in dictionaries is also possible.When using a dictionary only (absence of the `pattern` argument), the keys-pattern will be replaced by its value:
+
+```
+anon = Anonymize(
+    {
+        'regular-key': 'replacement-1',
+        re.compile('ca.*?er'): 'replacement-2'
+    }
+)
+```
+
+### Example of replacement with a CSV file
+
+```python
 # specifying a zip-format to zip unpacked archives after processing (.zip is default)
-anonymize_zip = Anonymize('/Users/casper/Desktop/keys.csv', zip_format='gztar')
+anonymize_zip = Anonymize('/Users/casper/Desktop/keys.csv')
 ```
 
 When using a csv-file, anonymoUUs will assume your file contains two columns: the left column contains the keywords which need to be replaced, the right column contains their substitutions. **Column headers are mandatory**, but don't have to follow a specific format.
@@ -44,18 +66,30 @@ r#ca.*?er, replacement_string
 The key will be compiles as a regex and replace every match with 'replacement_string'.
 
 
-When using a dictionary only (absence of the `pattern` argument), the keys will be replaced by their values. Again, it is possible to use (compiled) regular expressions as keys. The expression will replace all matches with its value. Example:
+### Example of replacement by regex pattern and function
 
-```
-anon = Anonymize(
-    {
-        'regular-key': 'replacement-1',
-        re.compile('ca.*?er'): 'replacement-2'
-    }
+If you are replacing with a pattern you can also use a function to 'calculate' the replacement string:
+
+```python
+def replace(match, **kwargs):
+    result = 'default-replacement'
+    match = int(match)
+    threshold = kwargs.get("threshold", 4000)
+    if match < threshold:
+        result = 'special-replacement'
+    return result
+
+anon = Anonymize(foo, pattern=r'\d{4}', threshold=1000)
+anon.substitute(
+    '/Users/casperkaandorp/Desktop/test.json', 
+    '/Users/casperkaandorp/Desktop/result-folder'
 )
 ```
+Note the possibility to provide additional arguments when you initialize an Anonymize object that will be passed to the replcement function (in the previous example, the `threshold` is passed to the `replace` function).
 
-Performance might be enhanced when your keywords can be generalized into a single regular expressions. UUnynomize will search these patterns and replace them instead of matching the entire dictionary/csv-file against file contents or file/folder-paths. Example:
+### Other arguments
+
+Performance is probably best when your keywords can be generalized into a single regular expressions. anonymoUUs will search these patterns and replace them instead of matching the entire dictionary/csv-file against file contents or file/folder-paths. Example:
 
 ```
 anonymize_regex = Anonymize(my_dict, pattern=r'[A-B]\d{4}')
@@ -71,6 +105,13 @@ By using the `use_word_boundaries` argument (defaults to False), the algorithm i
 
 ```
 anonymize_regex = Anonymize(my_dict, use_word_boundaries=True)
+```
+
+It is also to specify how to re-zip unzipped folders:
+
+```python
+# specifying a zip-format to zip unpacked archives after processing (.zip is default)
+anonymize_zip = Anonymize('/Users/casper/Desktop/keys.csv', zip_format='gztar')
 ```
 
 ### Windows usage
@@ -103,6 +144,6 @@ anonymize_regex.substitute('/Users/casper/Desktop/my_file.json')
 
 ## Todo
 
-Fix the infinite loop that occurs when the source folder shares the same parent folder as the target folder
+Cleaning up this document
 
 Testing ;)
