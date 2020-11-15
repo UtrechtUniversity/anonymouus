@@ -7,7 +7,6 @@ from collections import OrderedDict
 from pathlib import Path, PosixPath
 from typing import Callable, Union
 
-
 class Anonymize:
 
     def __init__(
@@ -82,8 +81,6 @@ class Anonymize:
         # Are we going to make a copy?
         self.copy = False
 
-
-
     def _convert_csv_to_dict(self, path_to_csv: str):
         '''Converts 2-column csv file into dictionary. Left
         column contains ids, right column contains substitutions.
@@ -113,7 +110,6 @@ class Anonymize:
         # return ordered dictionary
         return OrderedDict(data)
 
-
     def _reorder_dict(self):
         '''Re-order the substitution dictionary such that longest keys 
         are processed earlier, regex's come first'''
@@ -123,7 +119,6 @@ class Anonymize:
             reverse=True
         )
         self.mapping = OrderedDict(new_dict)
-
 
     def substitute(self, 
         source_path: Union[str, Path], 
@@ -161,11 +156,8 @@ class Anonymize:
                 # folder doesn't exist, create it
                 self._make_dir(target_path)
 
-            
-
         # start traversing
         self._traverse_tree(source_path, target_path)
-
 
     def _traverse_tree(self, 
         source: Path,
@@ -181,7 +173,6 @@ class Anonymize:
             for child in source.iterdir():
                 self._traverse_tree(child, target)
 
-    
     def _process_folder(self, 
         source: Path,
         target: Path
@@ -203,7 +194,6 @@ class Anonymize:
 
         return result
             
-
     def _process_file(self, 
         source: Path,
         target: Path
@@ -221,7 +211,6 @@ class Anonymize:
         else:
             self._process_unknown_file_type(source, target)
 
-
     def _process_target(
         self,
         source: Path,
@@ -238,12 +227,12 @@ class Anonymize:
             
         return new_target
 
-
     def _process_txt_based_file(
         self,
         source: Path,
         target: Path
         ):
+        print(source)
         # read contents
         contents = self._read_file(source)
         # substitute
@@ -274,6 +263,8 @@ class Anonymize:
         ):
         # create a temp folder to extract to
         with tempfile.TemporaryDirectory() as tmp_folder:
+            # turn folder into Path object
+            tmp_folder = Path(tmp_folder)
             # extract our archive
             shutil.unpack_archive(source, tmp_folder)
             # this is hacky, but inevitable: I want an in-place
@@ -281,6 +272,13 @@ class Anonymize:
             # off and on again
             copy = self.copy
             self.copy = False
+            # this is also a weird one: apparently Mac produces
+            # a MACOSX folder when it zips something, I am 
+            # not interested
+            macosx_folder = (tmp_folder / '__MACOSX')
+            if macosx_folder.exists() and macosx_folder.is_dir():
+                shutil.rmtree(macosx_folder, ignore_errors=True)
+             
             # perform the substitution
             self.substitute(Path(tmp_folder))
             # zip up the substitution
@@ -334,7 +332,7 @@ class Anonymize:
         path.mkdir(parents=True, exist_ok=True)
 
     def _read_file(self, source: Path):
-        f = open(source, 'r', encoding='utf-8')
+        f = open(source, 'r', encoding='utf-8', errors='ignore')
         contents = list(f)
         f.close()
         return contents

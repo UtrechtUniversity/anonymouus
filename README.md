@@ -142,8 +142,21 @@ anonymize_regex.substitute('/Users/casper/Desktop/download')
 anonymize_regex.substitute('/Users/casper/Desktop/my_file.json')
 ```
 
+### Reading contents of a file
+
+Files will be opened depending on their extension. Non refognized extensions will be skipped. The standard version of this package assumes 'UTF-8' encoding. Errors are going to be ignored. Since reading file-contents is done with a single function, it will be easy to adjust (different encodings,etc) by overloading it in an extension:
+
+```python
+# standard reading function
+def _read_file(self, source: Path):
+    f = open(source, 'r', encoding='utf-8', errors='ignore')
+    contents = list(f)
+    f.close()
+    return contents
+```
+
 ## Todo
 
 Cleaning up this document
 
-Testing ;)
+Testing! Sweet momma, it needs testing.
