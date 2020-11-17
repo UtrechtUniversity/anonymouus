@@ -16,7 +16,7 @@ As of now, anonymoUUs supports text-based files, like .txt, .html, .json and .cs
 
 In order to replace words or patterns you need a replacement-mapping in the form of:
 1. a dictionary - the keys will be replaced by the values
-2. a csv file - a csv file will be converted in a dictionary, the first column provides keys, the second value provides values 
+2. the path to a csv file - a csv file will be converted in a dictionary, the first column provides keys, the second value provides values. Path can be a String, Path or PosixPath!
 3. a function - a replacement function can be passed if a pattern is used. The function takes a found match and should return its replacement. The function must have at least one input argument.
 
 ### Example of replacement with a dictionary

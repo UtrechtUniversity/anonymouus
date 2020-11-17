@@ -33,8 +33,9 @@ class Anonymize:
         if type(mapping) is dict:
             self.mapping = mapping
 
-        elif type(mapping) in [Path, str] :
+        elif type(mapping) in [str, Path, PosixPath]:
             self.mapping = self._convert_csv_to_dict(mapping)
+            
         elif callable(mapping):
             # raise an error if the callable is not accompanied by a
             # pattern
