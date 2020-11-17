@@ -30,12 +30,13 @@ class Anonymize:
         self.mapping_is_function = False
         # if there is no substitution dictionary then convert the csv
         # substitution table into a dictionary
-        if type(mapping) is dict:
+        mapping_type = type(mapping)
+        if mapping_type is dict:
             self.mapping = mapping
 
-        elif type(mapping) in [str, Path, PosixPath]:
+        elif mapping_type in [str, Path, PosixPath]:
             self.mapping = self._convert_csv_to_dict(mapping)
-            
+
         elif callable(mapping):
             # raise an error if the callable is not accompanied by a
             # pattern
@@ -47,7 +48,9 @@ class Anonymize:
                 self.kwargs = kwargs
 
         else:
-            raise TypeError('mapping must be a dictionary, path or function')
+            msg = 'mapping must be a dictionary, path (str, Path, PosixPath) ' + \
+                f'or function. Found type: {mapping_type}'
+            raise TypeError(msg)
 
         # Word-boundaries: let's add them here, it's a one time 
         # overhead thing. Not the prettiest code.
@@ -355,4 +358,3 @@ class Anonymize:
     def _copy_file(self, source: Path, target: Path):
         if source != target:
             shutil.copy(source, target)
-
