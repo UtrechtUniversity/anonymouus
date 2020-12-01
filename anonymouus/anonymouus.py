@@ -4,7 +4,7 @@ import shutil
 import tempfile
 
 from collections import OrderedDict
-from pathlib import Path, PosixPath
+from pathlib import Path, PosixPath, WindowsPath
 from typing import Callable, Union
 
 class Anonymize:
@@ -31,10 +31,11 @@ class Anonymize:
         # if there is no substitution dictionary then convert the csv
         # substitution table into a dictionary
         mapping_type = type(mapping)
+
         if mapping_type is dict:
             self.mapping = mapping
 
-        elif mapping_type in [str, Path, PosixPath]:
+        elif mapping_type in [str, Path, PosixPath, WindowsPath]:
             self.mapping = self._convert_csv_to_dict(mapping)
 
         elif callable(mapping):
