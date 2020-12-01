@@ -49,7 +49,7 @@ class Anonymize:
                 self.kwargs = kwargs
 
         else:
-            msg = 'mapping must be a dictionary, path (str, Path, PosixPath) ' + \
+            msg = 'mapping must be a dictionary, path (str, Path, PosixPath, WindowsPath) ' + \
                 f'or function. Found type: {mapping_type}'
             raise TypeError(msg)
 
