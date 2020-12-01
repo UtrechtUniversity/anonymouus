@@ -237,7 +237,6 @@ class Anonymize:
         source: Path,
         target: Path
         ):
-        print(source)
         # read contents
         contents = self._read_file(source)
         # substitute
