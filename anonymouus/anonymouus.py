@@ -4,6 +4,7 @@ import shutil
 import tempfile
 
 from collections import OrderedDict
+from inspect import signature, Parameter
 from pathlib import Path, PosixPath, WindowsPath
 from typing import Callable, Union
 
@@ -16,6 +17,7 @@ class Anonymize:
             flags=0,
             use_word_boundaries: bool=False,
             zip_format: str='zip',
+            preprocess_text: Callable=None,
             **kwargs
         ):
 
@@ -25,6 +27,32 @@ class Anonymize:
         # using word boundaries around pattern or dict keys, avoids
         # substring-matching
         self.use_word_boundaries = use_word_boundaries
+        # if you use word boundaries, you might want to preprocess the
+        # strings. You can do this with preprocess text, that function
+        # must have at least one argument for the string itself
+        self.preprocess_text = preprocess_text
+        if callable(self.preprocess_text):
+            sig = signature(self.preprocess_text)
+            if len(sig.parameters) == 0:
+                raise ValueError("""
+                    preprocess_text must be assigned to a function with at 
+                    least one argument"""
+                )
+            elif len(sig.parameters) > 1:
+                # more than 1 parameter, do the other parameters 
+                # have default values?
+                parameters = list(sig.parameters.keys())[1:]
+                pars_without_default = [
+                    sig.parameters[k].default == Parameter.empty 
+                    for k in parameters
+                ]
+                if any(pars_without_default):
+                    raise ValueError("""
+                        preprocess_text must be aassigned to a function with
+                        one positional argument (the first) that takes a 
+                        string, all other arguments must have a default
+                        value.
+                    """)
 
         self.mapping = None
         self.mapping_is_function = False
@@ -300,6 +328,10 @@ class Anonymize:
     def _substitute_ids(self, string: str):
         '''Heart of this class: all matches of the regular expression will be
         substituted for the corresponding value in the id-dictionary'''
+        # preprocess if necessary
+        if callable(self.preprocess_text):
+            string = self.preprocess_text(string)
+
         if self.pattern is False:
             #
             # This might be more efficient:
