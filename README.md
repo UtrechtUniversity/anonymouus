@@ -1,14 +1,16 @@
 # anonymoUUs
 
-This description can be found [on GitHub here](https://github.com/UtrechtUniversity/anonymouus)
+This description can be found [on GitHub](https://github.com/UtrechtUniversity/anonymouus)
 
-anonymoUUs facilitates the replacement of keywords or regex-patterns within a file tree or zipped archive. It recursively traverses the tree, opens supported files and substitutes any found pattern or keyword with a replacement. Besides contents, anonymoUUs will substitue keywords/patterns in file/folder-paths as well.
+The software in this package traverses a file-tree looking for keywords with the aim of replacing them with a substitute. It was designed to anonymize data: the goal was to substitute multiple id strings in multiple files with pseudo ids to avoid tracable relationships between data batches. A single data batch typically consists of multiple nested folders that contain multiple files in multiple formats. The file contents, file names and folder names may or may not contain ids. AnonymoUUs will replace them all. The package also deals with zipped folders.
 
-The result will be either a copied or replaced version of the original file-tree with all substitutions made.
+The keyword-replacement mapping can be provided by the user in several forms: in dictionary, a csv file and a function. The result will be, depending on how you run the software, either a copied or replaced version of the original file-tree in which all replacements were made.
 
-As of now, anonymoUUs supports text-based files, like .txt, .html, .json and .csv. UTF-8 encoding is assumed. Besides text files, anonymoUUs is also able to handle (nested) zip archives. These archives will be unpacked in a temp folder, processed and zipped again.
+As of now, anonymoUUs supports text-based files, like .txt, .html, .json and .csv. UTF-8 encoding is assumed. But it is easy to extend the software to handle other formats as well. 
 
 ## Installation
+
+In your terminal type:
 
 `$ pip install anonymoUUs`
 
