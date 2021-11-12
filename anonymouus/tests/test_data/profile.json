@@ -1,0 +1,14 @@
+{
+    "name": {
+      "givenName": "Jane",
+      "familyName": "Doe",
+      "formattedName": "Jane Doe"
+    },
+    "displayName": "Jane Doe",
+    "emails": [{
+      "value": "j.doe@gmail.com"
+    }],
+    "gender": {
+      "type": "female"
+    }
+  }
