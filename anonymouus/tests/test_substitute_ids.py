@@ -7,6 +7,15 @@ from pathlib import Path
 import re
 from anonymouus.anonymouus import Anonymize
 
+# Options for providing keys and replacement values
+key_csv = Path.cwd()/'tests/test_data/keys.csv'
+key_dict = {
+'Jane Doe': 'aaaa',
+'Amsterdam':'bbbb',
+'j.doe@gmail.com':'cccc',
+re.compile('ca.*?er'):'dddd'
+} 
+
 # Input data for testing
 ids = [
     'Jane Doe',
@@ -17,84 +26,30 @@ ids = [
     'caterpillar']
 
 # Expected answers
-exp =        ['aaaa','JaneDoe','amsterdam','cccc','dddd','ddddpillar']
+exp_orig =        ['aaaa','JaneDoe','amsterdam','cccc','dddd','ddddpillar']
 exp_case =   ['aaaa','JaneDoe','bbbb','cccc','dddd','ddddpillar']
 exp_bounds = ['aaaa','JaneDoe','amsterdam','cccc','dddd','caterpillar']
 
-@pytest.mark.parametrize('anym_object,expected',[
-                            ('reg',exp),
-                            ('case',exp_case),
-                            ('bounds',exp_bounds)
-                            ],
-                        indirect = True
-                        )
-def test_substitute(anym_object,expected):
+
+opt_exp = {'orig':[0,False,exp_orig],
+           'case':[re.IGNORECASE,False,exp_case],
+           'bounds':[0,True,exp_bounds]
+            }
+
+@pytest.mark.parametrize('opts',[
+                                opt_exp['orig'],
+                                opt_exp['case'],
+                                opt_exp['bounds']
+                                ]
+                            )
+@pytest.mark.parametrize('keys',[  
+                                key_csv,
+                                key_dict                      
+                                ]
+                            )
+def test_substitute(keys,opts):
     """Test substitution of strings"""
 
-    res = [anym_object._substitute_ids(s) for s in ids]
-    assert res == expected
-
-
-
-# #@pytest.mark.parametrize("keys",[key_csv,key_dict])
-# @pytest.mark.parametrize("option,expected",[
-#                             (anym,exp),
-#                             (anym_case,exp_case),
-#                             (anym_bounds,exp_bounds)
-#                             ]
-#                         )
-# def test_substitute(option,expected):
-#     """Test substitution of strings"""
-
-#     anym = Anonymize(key_csv,option)
-#     res = [anym._substitute_ids(s) for s in ids]
-#     assert res == expected
-
-
-# def test_regular():
-#     """Test regular substitution of strings, without user options or flags"""
-
-#     anym = Anonymize(key_csv)
-
-#     res = [anym._substitute_ids(s) for s in ids]
-#     exp = [
-#         'aaaa',
-#         'JaneDoe',
-#         'amsterdam',
-#         'cccc',
-#         'dddd',
-#         'ddddpillar']
-
-#     assert res == exp
-
-# def test_ignore_case(key_csv):
-#     """Test case-independent substitution of strings, without user options or flags"""
-
-#     anym = Anonymize(key_csv,flags=re.IGNORECASE)
-
-#     res = [anym._substitute_ids(s) for s in ids]
-#     exp = [
-#         'aaaa',
-#         'JaneDoe',
-#         'bbbb',
-#         'cccc',
-#         'dddd',
-#         'ddddpillar']
-
-#     assert res == exp
-
-# def test_word_boundaries(key_csv):
-    # """Test case-independent substitution of strings, without user options or flags"""
-
-    # anym = Anonymize(key_csv,use_word_boundaries=True)
-
-    # res = [anym._substitute_ids(s) for s in ids]
-    # exp = [
-    #     'aaaa',
-    #     'JaneDoe',
-    #     'amsterdam',
-    #     'cccc',
-    #     'dddd',
-    #     'caterpillar']
-
-    # assert res == exp
+    anym = Anonymize(keys,flags=opts[0],use_word_boundaries=opts[1])
+    res = [anym._substitute_ids(s) for s in ids]
+    assert res == opts[2]
