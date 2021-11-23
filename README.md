@@ -14,6 +14,15 @@ In your terminal type:
 
 `$ pip install anonymoUUs`
 
+## Getting started
+Get started with the anonymoUUs package by trying it out in this [notebook](/anonymouus/examples/try_testing.ipynb) manual
+
+
+Prerequisites:
+* download the testdata from the [test_data folder](/anonymouus/tests/test_data)
+* make sure you have [jupyter notebook](https://jupyter.org/install) installed
+
+
 ## Usage
 
 In order to replace words or patterns you need a replacement-mapping in the form of:
