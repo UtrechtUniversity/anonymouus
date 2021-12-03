@@ -24,6 +24,7 @@ AnonymoUUs can work with multiple text-based file types, like `.txt`, `.html`, `
     + [2. Mapping](#2-mapping)
     + [3. Create an Anonymize object](#3-create-an-anonymize-object)
     + [4. Substitute data](#4-substitute-data)
+  * [Attribution and academic use](#attribution-and-academic-use)
   * [Contributing](#contributing)
   * [Contact](#contact)
 
@@ -206,6 +207,10 @@ anonymize_regex.substitute('/Users/casper/Desktop/download')
 # process a single file, and replace it
 anonymize_regex.substitute('/Users/casper/Desktop/my_file.json')
 ```
+## Attribution and academic use
+The code in this project is licensed with [MIT](LICENSE.md).
+This software is archived at Zenodo [![DOI](https://zenodo.org/badge/281087099.svg)](https://zenodo.org/badge/latestdoi/281087099)
+
 
 ## Contributing
 Contributions are what make the open source community an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
