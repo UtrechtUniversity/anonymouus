@@ -1,0 +1,13 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: anonymoUUs
+message: Please cite this software as follows
+type: software
+authors:
+  - given-names: Casper
+    family-names: Kaandorp
+    email: c.s.kaandorp@uu.nl
+    affiliation: Utrecht University
+    orcid: 'https://orcid.org/0000-0001-6326-6680'
