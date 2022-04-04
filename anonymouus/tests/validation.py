@@ -16,6 +16,7 @@ TODO include case-indepency and word boundaries.
 import argparse
 import csv
 import json
+import logging
 import pandas as pd
 from pathlib import Path
 import re
@@ -74,7 +75,7 @@ class Validation:
         try:
             subt = self.keys[name.strip()]
         except KeyError:
-            print(f'No hash for {name}')
+            logging.error(f'No hash for {name}')
             subt = '__NOHASH__'
 
         return subt
@@ -139,9 +140,11 @@ class Validation:
         """Validate deidentification"""
 
         for item in self.labels.keys():
-
+            logging.debug(f'Compute frequencies for {item}')
             freqs = self.compute_freqs(item)
             self.labels[item].update(freqs)
+            stats = self.compute_stats(item)
+            self.labels[item].update(stats)
 
         # summarize frequencies per label category
         labels_df = pd.DataFrame(self.labels).transpose()
@@ -149,13 +152,41 @@ class Validation:
         grp_dict = grp_df.transpose().to_dict()
 
         for label in grp_dict.keys():
-            metrics = self.compute_metrics(label)
+            logging.debug(f'Compute metrics for {label}')
+            metrics = self.compute_metrics(grp_dict, label)
             grp_dict[label].update(metrics)
 
         return grp_dict
 
+    def compute_metrics(self, grp_dict: dict, label: str) -> dict:
+        """ Compute metrics for a label """
+    
+        metrics = {}
+        try:
+            precision = grp_dict[label]['TP'] / (grp_dict[label]['TP'] + grp_dict[label]['FP'])
+        except ZeroDivisionError:
+            precision = 0        
+        metrics['precision'] = precision
+        
+        try:
+            recall = grp_dict[label]['TP'] / (grp_dict[label]['TP'] + grp_dict[label]['FN'])
+        except ZeroDivisionError:
+            recall = 0   
+        metrics['recall'] = recall
+        
+        try:
+            f1 = 2*(precision*recall) / (precision+recall)
+        except ZeroDivisionError:
+            f1 = 0   
+        metrics['f1'] = f1
+        
+        return metrics
+
+
 
 def main():
+    logging.basicConfig(level=logging.DEBUG)
+
     test_data = Path.cwd()/'anonymouus/tests/test_data'
 
     parser = argparse.ArgumentParser()
@@ -167,9 +198,10 @@ def main():
                         default = test_data / "keys.csv")
     args = parser.parse_args()
 
+
     validator = Validation(args.anymdir, args.gtfile, args.keyfile)
     metrics = validator.validate()
-
+    logging.debug(f"Metrics: {metrics}")
 
 if __name__ == '__main__':
     main()
