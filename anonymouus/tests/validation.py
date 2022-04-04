@@ -156,20 +156,19 @@ class Validation:
 
 
 def main():
-    test_data = Path.cwd()/'tests/test_data'
+    test_data = Path.cwd()/'anonymouus/tests/test_data'
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--anymdir", "-a", help="Folder with anonymized data",
-                        default=test_data/'anonymized')
-    parser.add_argument("--gtfile", "-g", help="Labeled groundtruth file",
-                        default=test_data/'labeled.json')
-    parser.add_argument("--keyfile", "-k", help="Keys file",
-                        default=test_data/'keys.csv')
+    parser.add_argument("--anymdir", type = Path, help = "Folder with anonymized data",
+                        default = test_data / "anonymized")
+    parser.add_argument("--gtfile", type = Path, help="Labeled groundtruth file",
+                        default = test_data / "labeled.json")
+    parser.add_argument("--keyfile", type = Path, help = "Keys file",
+                        default = test_data / "keys.csv")
     args = parser.parse_args()
 
     validator = Validation(args.anymdir, args.gtfile, args.keyfile)
     metrics = validator.validate()
-    print(metrics)
 
 
 if __name__ == '__main__':
