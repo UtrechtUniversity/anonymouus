@@ -214,15 +214,21 @@ anonymize_regex.substitute('/Users/casper/Desktop/my_file.json')
 ## Validation
 The validation procedure determines the performance of anonymization software. 
 It compares results of the automated anonymization with a manually labeled ground-truth. 
-All occurrences of personal identifiable information in the ground-truth should be detected and correctly substituted in the automatically de-identified version.
+The validation procedure checks whether all occurrences of personal identifiable information, 
+as detected in the manually labeled ground-truth, are correctly substituted.
 
 ### Prepare
-Clone this repository to run the validation 
+Clone this repository to run the validation. 
+
 Make sure you have these data present:
 * anonymized files
 * key file
-* manually labeled ground truth (created with Label Studio; json format)
+* manually labeled ground truth 
 Example data can be found in the [test_data](test_data/) in this folder
+
+Create your manually labeled file with dedicated software like [Label Studio](https://labelstud.io/).
+In the graphical user interface you can easily add custom labels to the sensitive information in your text files
+
 
 ### Validate
 Run from the commandline
@@ -232,8 +238,8 @@ $ python validation.py [OPTIONS]
 
 Options:
   --anymdir  path to folder with anonymized data
-  --gtfile  path to labeled groundtruth file
-  --keyfile  path to key file
+  --gtfile  path to labeled groundtruth file (json)
+  --keyfile  path to key file (csv)
 
 ```
 
