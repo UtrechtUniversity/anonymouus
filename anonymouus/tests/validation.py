@@ -23,16 +23,17 @@ import re
 
 
 class Validation:
-    """ Validate deidentification by comparing to a labeled ground truth """
+    """ Validate deidentification of text files
+        by comparing to a labeled ground truth """
 
-    def __init__(self, anymdir, gtfile, keyfile):
-        self.gt = self.read_gt(gtfile)
-        self.labels = self.gt_labels()
+    def __init__(self, anymdir: Path, gtfile: Path, keyfile: Path):
+        self.gt = self._read_gt(gtfile)
+        self.labels = self._gt_labels()
         self.raw_text = self.gt['task']['data']['my_text']
-        self.keys = self.read_keys(keyfile)
-        self.anym_text = self.read_anym(anymdir)
+        self.substitutes = self._read_keys(keyfile)
+        self.anym_text = self._read_anym(anymdir)
 
-    def read_gt(self, file: Path) -> dict:
+    def _read_gt(self, file: Path) -> dict:
         """ Read manually labeled ground truth file """
 
         with open(file, 'r') as f:
@@ -40,7 +41,7 @@ class Validation:
 
         return gt
 
-    def gt_labels(self) -> dict:
+    def _gt_labels(self) -> dict:
         """Extract PII labels from ground truth"""
 
         gt_labels = {
@@ -51,7 +52,7 @@ class Validation:
 
         return gt_labels
 
-    def read_keys(self, file: Path) -> dict:
+    def _read_keys(self, file: Path) -> dict:
         """ Read file with PII keys and substitutes"""
         with file.open() as f:
             reader = csv.DictReader(f)
@@ -59,7 +60,7 @@ class Validation:
 
         return keys
 
-    def read_anym(self, dir: Path) -> str:
+    def _read_anym(self, dir: Path) -> str:
         """ Read all anonymized files"""
 
         files = list(dir.glob('*.txt'))
@@ -70,17 +71,17 @@ class Validation:
 
         return anym_text
 
-    def find_key(self, name: str) -> str:
+    def _find_subt(self, name: str) -> str:
         """Find key(substitute) for a given name"""
         try:
-            subt = self.keys[name.strip()]
+            subt = self.substitutes[name.strip()]
         except KeyError:
             logging.error(f'No hash for {name}')
             subt = '__NOHASH__'
 
         return subt
 
-    def count_subt(self, item: str) -> int:
+    def _count_subt(self, item: str) -> int:
         """Count frequency of substitutes in anonymized text
            for a given PII item"""
 
@@ -89,13 +90,13 @@ class Validation:
         elif self.labels[item]['label'] == 'LOC':
             subt = '__location'
         else:  # item is a name
-            subt = self.find_key(item)
+            subt = self._find_subt(item)
 
         freq_subt = len(re.findall(subt, self.anym_text))
 
         return freq_subt
 
-    def compute_freqs(self, item: str) -> dict:
+    def _compute_freqs(self, item: str) -> dict:
         """Count frequencies in raw and anonymized text
            per PII item and its substitute"""
 
@@ -109,12 +110,12 @@ class Validation:
         freqs['freq_anym'] = freq_anym
 
         # count freq of substitute in anonymized text
-        freq_subt = self.count_subt(item)
+        freq_subt = self._count_subt(item)
         freqs['freq_subt'] = freq_subt
 
         return freqs
 
-    def compute_stats(self, item: str) -> dict:
+    def _compute_stats(self, item: str) -> dict:
         """ Compute true positives, false positives, false negatives
             per PII item """
 
@@ -124,41 +125,21 @@ class Validation:
             TP = 0
         stats['TP'] = TP
 
+        # true positives cannot be more than substitutes
         if self.labels[item]['freq_subt'] > TP:
             self.labels[item]['freq_subt'] = TP
         FP = self.labels[item]['freq_subt'] - TP
         stats['FP'] = FP
 
         FN = self.labels[item]['freq_anym']
+        # false negatives cannot be more than freq in gt
         if FN > self.labels[item]['freq_gt']:
             FN = self.labels[item]['freq_gt']
         stats['FN'] = FN
 
         return stats
 
-    def validate(self) -> dict:
-        """Validate deidentification"""
-
-        for item in self.labels.keys():
-            logging.debug(f'Compute frequencies for {item}')
-            freqs = self.compute_freqs(item)
-            self.labels[item].update(freqs)
-            stats = self.compute_stats(item)
-            self.labels[item].update(stats)
-
-        # summarize frequencies per label category
-        labels_df = pd.DataFrame(self.labels).transpose()
-        grp_df = labels_df.groupby('label').sum()
-        grp_dict = grp_df.transpose().to_dict()
-
-        for label in grp_dict.keys():
-            logging.debug(f'Compute metrics for {label}')
-            metrics = self.compute_metrics(grp_dict, label)
-            grp_dict[label].update(metrics)
-
-        return grp_dict
-
-    def compute_metrics(self, grp_dict: dict, label: str) -> dict:
+    def _compute_metrics(self, grp_dict: dict, label: str) -> dict:
         """ Compute metrics for a label """
     
         metrics = {}
@@ -181,7 +162,35 @@ class Validation:
         metrics['f1'] = f1
         
         return metrics
+    
+    def validate(self) -> dict:
+        """ Main method for validation. 
+            Collect frequencies, stats and metrics on deidentification """
 
+        for item in self.labels.keys():
+            logging.debug(f'Compute frequencies for {item}')
+            freqs = self._compute_freqs(item)
+            self.labels[item].update(freqs)
+            stats = self._compute_stats(item)
+            self.labels[item].update(stats)
+
+        # summarize frequencies per label category
+        labels_df = pd.DataFrame(self.labels).transpose()
+        gr_labels_df = labels_df.groupby('label').sum()
+        gr_labels_dict = gr_labels_df.transpose().to_dict()
+
+        for label in gr_labels_dict.keys():
+            logging.debug(f'Compute metrics for {label}')
+            metrics = self._compute_metrics(gr_labels_dict, label)
+            gr_labels_dict[label].update(metrics)
+
+        self._write_val(gr_labels_dict)
+
+    def _write_val(self, gr_labels_dict: dict):
+        """ Write results of validation to csv file"""
+
+        validation_df = pd.DataFrame(gr_labels_dict).transpose()
+        validation_df.to_csv("validation.csv")
 
 
 def main():
