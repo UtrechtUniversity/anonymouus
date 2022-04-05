@@ -24,6 +24,9 @@ AnonymoUUs can work with multiple text-based file types, like `.txt`, `.html`, `
     + [2. Mapping](#2-mapping)
     + [3. Create an Anonymize object](#3-create-an-anonymize-object)
     + [4. Substitute data](#4-substitute-data)
+  * [Validation](#validation)  
+    + [Prepare](#prepare)
+    + [Validate](#validate)
   * [Attribution and academic use](#attribution-and-academic-use)
   * [Contributing](#contributing)
   * [Contact](#contact)
@@ -207,6 +210,33 @@ anonymize_regex.substitute('/Users/casper/Desktop/download')
 # process a single file, and replace it
 anonymize_regex.substitute('/Users/casper/Desktop/my_file.json')
 ```
+
+## Validation
+The validation procedure determines the performance of anonymization software. 
+It compares results of the automated anonymization with a manually labeled ground-truth. 
+All occurrences of personal identifiable information in the ground-truth should be detected and correctly substituted in the automatically de-identified version.
+
+### Prepare
+Clone this repository to run the validation 
+Make sure you have these data present:
+* anonymized files
+* key file
+* manually labeled ground truth (created with Label Studio; json format)
+Example data can be found in the [test_data](test_data/) in this folder
+
+### Validate
+Run from the commandline
+```
+$ cd tests
+$ python validation.py [OPTIONS]
+
+Options:
+  --anymdir  path to folder with anonymized data
+  --gtfile  path to labeled groundtruth file
+  --keyfile  path to key file
+
+```
+
 ## Attribution and academic use
 The code in this project is licensed with [MIT](LICENSE.md).
 This software is archived at Zenodo [![DOI](https://zenodo.org/badge/281087099.svg)](https://zenodo.org/badge/latestdoi/281087099)
