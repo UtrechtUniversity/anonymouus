@@ -24,6 +24,9 @@ AnonymoUUs can work with multiple text-based file types, like `.txt`, `.html`, `
     + [2. Mapping](#2-mapping)
     + [3. Create an Anonymize object](#3-create-an-anonymize-object)
     + [4. Substitute data](#4-substitute-data)
+  * [Validation](#validation)  
+    + [Prepare](#prepare)
+    + [Validate](#validate)
   * [Attribution and academic use](#attribution-and-academic-use)
   * [Contributing](#contributing)
   * [Contact](#contact)
@@ -207,6 +210,39 @@ anonymize_regex.substitute('/Users/casper/Desktop/download')
 # process a single file, and replace it
 anonymize_regex.substitute('/Users/casper/Desktop/my_file.json')
 ```
+
+## Validation
+The validation procedure determines the performance of anonymization software. 
+It compares results of the automated anonymization with a manually labeled ground-truth. 
+The validation procedure checks whether all occurrences of personal identifiable information, 
+as detected in the manually labeled ground-truth, are correctly substituted.
+
+### Prepare
+Clone this repository to run the validation. 
+
+Make sure you have these data present:
+* anonymized files
+* key file
+* manually labeled ground truth 
+Example data can be found in the [test_data](test_data/) in this folder
+
+Create your manually labeled file with dedicated software like [Label Studio](https://labelstud.io/).
+In the graphical user interface you can easily add custom labels to the sensitive information in your text files
+
+
+### Validate
+Run from the commandline
+```
+$ cd tests
+$ python validation.py [OPTIONS]
+
+Options:
+  --anymdir  path to folder with anonymized data
+  --gtfile  path to labeled groundtruth file (json)
+  --keyfile  path to key file (csv)
+
+```
+
 ## Attribution and academic use
 The code in this project is licensed with [MIT](LICENSE.md).
 This software is archived at Zenodo [![DOI](https://zenodo.org/badge/281087099.svg)](https://zenodo.org/badge/latestdoi/281087099)
