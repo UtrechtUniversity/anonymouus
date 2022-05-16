@@ -1,0 +1,258 @@
+{
+  "id": 9,
+  "created_username": " m.g.devos@uu.nl, 1",
+  "created_ago": "1\u00a0minute",
+  "task": {
+    "id": 17,
+    "data": {
+      "my_text": "My name is Jane Doe. I live in Amsterdam. I would like to test Caspers software. My mail address is jane.doe@gmail.com. My dog is called Snoopie. Say hi to Mary in Rotterdam.My name is John. I live in Utrecht. I would like to test caspers software. My mail address is j.john@hotmail.com. My cat is called Garfield. Say hi to Jack in Amsterdam."
+    },
+    "meta": {},
+    "created_at": "2022-02-11T08:49:56.475049Z",
+    "updated_at": "2022-02-11T08:53:28.371865Z",
+    "is_labeled": true,
+    "overlap": 1,
+    "project": 2,
+    "file_upload": 16
+  },
+  "completed_by": {
+    "id": 1,
+    "first_name": "",
+    "last_name": "",
+    "email": "m.g.devos@uu.nl"
+  },
+  "result": [
+    {
+      "value": {
+        "start": 11,
+        "end": 19,
+        "text": "Jane Doe",
+        "labels": [
+          "NAME"
+        ]
+      },
+      "id": "7mqwbZhkhU",
+      "from_name": "label",
+      "to_name": "text",
+      "type": "labels",
+      "origin": "manual"
+    },
+    {
+      "value": {
+        "start": 63,
+        "end": 69,
+        "text": "Casper",
+        "labels": [
+          "NAME"
+        ]
+      },
+      "id": "0RZGZ9Zey4",
+      "from_name": "label",
+      "to_name": "text",
+      "type": "labels",
+      "origin": "manual"
+    },
+    {
+      "value": {
+        "start": 234,
+        "end": 240,
+        "text": "casper",
+        "labels": [
+          "NAME"
+        ]
+      },
+      "id": "0RZGZ9Zey4",
+      "from_name": "label",
+      "to_name": "text",
+      "type": "labels",
+      "origin": "manual"
+    },
+    {
+      "value": {
+        "start": 137,
+        "end": 144,
+        "text": "Snoopie",
+        "labels": [
+          "NAME"
+        ]
+      },
+      "id": "-NVlswWxZV",
+      "from_name": "label",
+      "to_name": "text",
+      "type": "labels",
+      "origin": "manual"
+    },
+    {
+      "value": {
+        "start": 231,
+        "end": 237,
+        "text": "casper",
+        "labels": [
+          "NAME"
+        ]
+      },
+      "id": "cvuU3mg6B-",
+      "from_name": "label",
+      "to_name": "text",
+      "type": "labels",
+      "origin": "manual"
+    },
+    {
+      "value": {
+        "start": 305,
+        "end": 313,
+        "text": "Garfield",
+        "labels": [
+          "NAME"
+        ]
+      },
+      "id": "XqdM6ncWQK",
+      "from_name": "label",
+      "to_name": "text",
+      "type": "labels",
+      "origin": "manual"
+    },
+    {
+      "value": {
+        "start": 325,
+        "end": 329,
+        "text": "Jack",
+        "labels": [
+          "NAME"
+        ]
+      },
+      "id": "ffmmctFkfV",
+      "from_name": "label",
+      "to_name": "text",
+      "type": "labels",
+      "origin": "manual"
+    },
+    {
+      "value": {
+        "start": 185,
+        "end": 189,
+        "text": "John",
+        "labels": [
+          "NAME"
+        ]
+      },
+      "id": "aFT6A5c3Tl",
+      "from_name": "label",
+      "to_name": "text",
+      "type": "labels",
+      "origin": "manual"
+    },
+    {
+      "value": {
+        "start": 156,
+        "end": 160,
+        "text": "Mary",
+        "labels": [
+          "NAME"
+        ]
+      },
+      "id": "Gg0auyUITB",
+      "from_name": "label",
+      "to_name": "text",
+      "type": "labels",
+      "origin": "manual"
+    },
+    {
+      "value": {
+        "start": 31,
+        "end": 40,
+        "text": "Amsterdam",
+        "labels": [
+          "LOC"
+        ]
+      },
+      "id": "IRfToqknwx",
+      "from_name": "label",
+      "to_name": "text",
+      "type": "labels",
+      "origin": "manual"
+    },
+    {
+      "value": {
+        "start": 201,
+        "end": 208,
+        "text": "Utrecht",
+        "labels": [
+          "LOC"
+        ]
+      },
+      "id": "2uzCMvydjf",
+      "from_name": "label",
+      "to_name": "text",
+      "type": "labels",
+      "origin": "manual"
+    },
+    {
+      "value": {
+        "start": 164,
+        "end": 173,
+        "text": "Rotterdam",
+        "labels": [
+          "LOC"
+        ]
+      },
+      "id": "II1yYXihM6",
+      "from_name": "label",
+      "to_name": "text",
+      "type": "labels",
+      "origin": "manual"
+    },
+    {
+      "value": {
+        "start": 333,
+        "end": 342,
+        "text": "Amsterdam",
+        "labels": [
+          "LOC"
+        ]
+      },
+      "id": "Lv-d5IC_RE",
+      "from_name": "label",
+      "to_name": "text",
+      "type": "labels",
+      "origin": "manual"
+    },
+    {
+      "value": {
+        "start": 100,
+        "end": 118,
+        "text": "jane.doe@gmail.com",
+        "labels": [
+          "EMAIL"
+        ]
+      },
+      "id": "-iFeNdyZOO",
+      "from_name": "label",
+      "to_name": "text",
+      "type": "labels",
+      "origin": "manual"
+    },
+    {
+      "value": {
+        "start": 268,
+        "end": 286,
+        "text": "j.john@hotmail.com",
+        "labels": [
+          "EMAIL"
+        ]
+      },
+      "id": "on3ip9DeC7",
+      "from_name": "label",
+      "to_name": "text",
+      "type": "labels",
+      "origin": "manual"
+    }
+  ],
+  "was_cancelled": false,
+  "ground_truth": false,
+  "created_at": "2022-02-11T08:52:14.107869Z",
+  "updated_at": "2022-02-11T08:53:28.440825Z",
+  "lead_time": 256.611,
+  "parent_prediction": null,
+  "parent_annotation": null
+}

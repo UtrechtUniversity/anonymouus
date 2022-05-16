@@ -1,0 +1,9 @@
+names,subt
+Jane Doe,aaaa
+Casper,bbbb
+John,cccc
+Garfield,dddd
+Mary,eeee
+Amsterdam,__location
+Rotterdam,__location
+re.compile('[a-zA-ZÀ-ÿ0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+'),__email
