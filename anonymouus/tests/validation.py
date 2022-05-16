@@ -24,7 +24,8 @@ import re
 
 class Validation:
     """ Validate deidentification of text files
-        by comparing to a labeled ground truth """
+        by comparing to a labeled ground truth
+    """
 
     def __init__(self, anymdir: Path, gtfile: Path, keyfile: Path):
         self.gt = self._read_gt(gtfile)
@@ -34,7 +35,18 @@ class Validation:
         self.anym_text = self._read_anym(anymdir)
 
     def _read_gt(self, file: Path) -> dict:
-        """ Read manually labeled ground truth file """
+        """Read manually labeled ground truth file
+
+        Parameters
+        ----------
+        file : Path
+            path to labeled ground truth file (.json)
+
+        Returns
+        -------
+        dict
+            _description_
+        """
 
         with open(file, 'r') as f:
             gt = json.loads(f.read())
