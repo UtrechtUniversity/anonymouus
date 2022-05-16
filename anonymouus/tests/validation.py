@@ -65,7 +65,18 @@ class Validation:
         return gt_labels
 
     def _read_keys(self, file: Path) -> dict:
-        """ Read file with PII keys and substitutes"""
+        """ Read file with PII keys and substitutes
+
+        Parameters
+        ----------
+        dir : Path
+            path to key file
+
+        Returns
+        -------
+        dict of str
+            dictionary of PII keys and substitutes
+        """
         with file.open() as f:
             reader = csv.DictReader(f)
             keys = {row['names']: row['subt'] for row in reader}
@@ -73,7 +84,18 @@ class Validation:
         return keys
 
     def _read_anym(self, dir: Path) -> str:
-        """ Read all anonymized files"""
+        """read anonymized file
+
+        Parameters
+        ----------
+        dir : Path
+            path to directory with anonymized file
+
+        Returns
+        -------
+        str
+            text content of anonymized file
+        """
 
         files = list(dir.glob('*.txt'))
 
@@ -110,7 +132,20 @@ class Validation:
 
     def _compute_freqs(self, item: str) -> dict:
         """Count frequencies in raw and anonymized text
-           per PII item and its substitute"""
+           per PII item and its substitute
+
+        Parameters
+        ----------
+        item : str
+            PII element
+
+        Returns
+        -------
+        dict of int
+            _description_
+        """
+
+
 
         freqs = {}
         # count freq of label in ground truth
