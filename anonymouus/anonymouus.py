@@ -2,6 +2,7 @@ import csv
 import re
 import shutil
 import tempfile
+import pandas as pd
 
 from collections import OrderedDict
 from inspect import signature, Parameter
@@ -35,21 +36,21 @@ class Anonymize:
             sig = signature(self.preprocess_text)
             if len(sig.parameters) == 0:
                 raise ValueError("""
-                    preprocess_text must be assigned to a function with at 
+                    preprocess_text must be assigned to a function with at
                     least one argument"""
                 )
             elif len(sig.parameters) > 1:
-                # more than 1 parameter, do the other parameters 
+                # more than 1 parameter, do the other parameters
                 # have default values?
                 parameters = list(sig.parameters.keys())[1:]
                 pars_without_default = [
-                    sig.parameters[k].default == Parameter.empty 
+                    sig.parameters[k].default == Parameter.empty
                     for k in parameters
                 ]
                 if any(pars_without_default):
                     raise ValueError("""
                         preprocess_text must be aassigned to a function with
-                        one positional argument (the first) that takes a 
+                        one positional argument (the first) that takes a
                         string, all other arguments must have a default
                         value.
                     """)
@@ -81,7 +82,7 @@ class Anonymize:
                 f'or function. Found type: {mapping_type}'
             raise TypeError(msg)
 
-        # Word-boundaries: let's add them here, it's a one time 
+        # Word-boundaries: let's add them here, it's a one time
         # overhead thing. Not the prettiest code.
         # the regular expression to find certain patterns
         if pattern is not None:
@@ -94,7 +95,7 @@ class Anonymize:
             if not self.mapping_is_function:
                 # re-order the OrderedDict such that the longest
                 # keys are first: ensures that shorter versions of keys
-                # will not be substituted first if bigger substitutions 
+                # will not be substituted first if bigger substitutions
                 # are possible
                 self._reorder_dict()
                 # add word boundaries if requested
@@ -113,6 +114,9 @@ class Anonymize:
 
         # Are we going to make a copy?
         self.copy = False
+
+        self.col_spec = None
+        self.col_spec_type = None
 
     def _convert_csv_to_dict(self, path_to_csv: str):
         '''Converts 2-column csv file into dictionary. Left
@@ -144,17 +148,17 @@ class Anonymize:
         return OrderedDict(data)
 
     def _reorder_dict(self):
-        '''Re-order the substitution dictionary such that longest keys 
+        '''Re-order the substitution dictionary such that longest keys
         are processed earlier, regex's come first'''
         new_dict = sorted(
-            self.mapping.items(), 
-            key=lambda t: len(t[0]) if type(t[0]) is str else 100000, 
+            self.mapping.items(),
+            key=lambda t: len(t[0]) if type(t[0]) is str else 100000,
             reverse=True
         )
         self.mapping = OrderedDict(new_dict)
 
-    def substitute(self, 
-        source_path: Union[str, Path], 
+    def substitute(self,
+        source_path: Union[str, Path],
         target_path: Union[str, Path]=None
         ):
 
@@ -164,7 +168,7 @@ class Anonymize:
 
         # make sure source exists:
         if not source_path.exists():
-            raise RuntimeError('source path does not exist')  
+            raise RuntimeError('source path does not exist')
 
         # ensure we have a target Path
         if target_path == None:
@@ -192,7 +196,7 @@ class Anonymize:
         # start traversing
         self._traverse_tree(source_path, target_path)
 
-    def _traverse_tree(self, 
+    def _traverse_tree(self,
         source: Path,
         target: Path
         ):
@@ -206,7 +210,7 @@ class Anonymize:
             for child in source.iterdir():
                 self._traverse_tree(child, target)
 
-    def _process_folder(self, 
+    def _process_folder(self,
         source: Path,
         target: Path
         ) -> Path:
@@ -226,8 +230,8 @@ class Anonymize:
             result = (target, target)
 
         return result
-            
-    def _process_file(self, 
+
+    def _process_file(self,
         source: Path,
         target: Path
         ):
@@ -237,7 +241,9 @@ class Anonymize:
 
         extension = source.suffix
 
-        if extension in ['.txt', '.csv', '.html', '.htm', '.xml', '.json']:
+        if extension in [ '.csv' ] and self.col_spec:
+            self._process_csv_file(source, target)
+        elif extension in ['.txt', '.csv', '.html', '.htm', '.xml', '.json']:
             self._process_txt_based_file(source, target)
         elif extension in ['.zip', '.gzip', '.gz']:
             self._process_zip_file(source, target, extension)
@@ -257,7 +263,7 @@ class Anonymize:
         # to the source, we need to differentiate
         if self.copy and new_target == source:
             new_target = (new_target.parent / new_target.name).with_suffix('.copy' + new_target.suffix)
-            
+
         return new_target
 
     def _process_txt_based_file(
@@ -305,12 +311,12 @@ class Anonymize:
             copy = self.copy
             self.copy = False
             # this is also a weird one: apparently Mac produces
-            # a MACOSX folder when it zips something, I am 
+            # a MACOSX folder when it zips something, I am
             # not interested
             macosx_folder = (tmp_folder / '__MACOSX')
             if macosx_folder.exists() and macosx_folder.is_dir():
                 shutil.rmtree(macosx_folder, ignore_errors=True)
-             
+
             # perform the substitution
             self.substitute(Path(tmp_folder))
             # zip up the substitution
@@ -337,7 +343,7 @@ class Anonymize:
             # This might be more efficient:
             # https://en.wikipedia.org/wiki/Aho%E2%80%93Corasick_algorithm
             #
-            # loop over dict keys, try to find them in string and replace them 
+            # loop over dict keys, try to find them in string and replace them
             # with their values
             for key, value in self.mapping.items():
                 if type(key) is re.Pattern:
@@ -345,7 +351,7 @@ class Anonymize:
                 string = re.sub(key, str(value), string, flags=self.flags)
 
         else:
-            
+
             if self.mapping_is_function:
                 # if there is a mapping function involved, we will use that
                 string = self.pattern.sub(
@@ -356,7 +362,7 @@ class Anonymize:
                 # identify patterns and substitute them with appropriate substitute
                 string = self.pattern.sub(
                     lambda match: self.mapping.get(
-                        match.group(), 
+                        match.group(),
                         match.group()
                     ),
                     string
@@ -390,3 +396,108 @@ class Anonymize:
     def _copy_file(self, source: Path, target: Path):
         if source != target:
             shutil.copy(source, target)
+
+
+
+
+
+
+
+
+
+
+
+
+
+    def set_col_spec(self,col_spec:list):
+        if len([x for x in col_spec if isinstance(x,str)])!=len(col_spec) and \
+           len([x for x in col_spec if isinstance(x,int)])!=len(col_spec):
+            raise ValueError("Column indices should be all strings or all integers")
+
+        self.col_spec_type = "str" if len([x for x in col_spec if isinstance(x,str)])==len(col_spec) else "int"
+
+        if self.col_spec_type == "int" and min(col_spec)<0:
+                raise ValueError("Negative column indices are not allowed")
+
+        self.col_spec = col_spec
+
+        if self.col_spec_type == "str":
+            self.col_spec = list(map(lambda x: x.strip(),self.col_spec))
+
+    def substitute_string(self,source: str):
+        if not type(source) is str:
+            raise RuntimeError('source is no string')
+
+        if len(source)==0:
+            return
+
+        substituted_contents = self._substitute_ids(source)
+        return substituted_contents
+
+    def _process_csv_file(
+        self,
+        source: Path,
+        target: Path
+        ):
+
+        # read contents
+        contents = pd.read_csv(source, dtype=str)
+
+        # see if all specified columns actually exist
+        if self.col_spec_type == "str":
+            # trim the column headers
+            contents.columns = map(lambda x: x.strip(),contents.columns)
+            missing_cols = [x for x in self.col_spec if x not in contents.columns ]
+            if len(missing_cols)>0:
+                raise ValueError(f"""
+                    Columns do not exist in source: {'; '.join(missing_cols)}
+                    Valid columns: {'; '.join(contents.columns)}
+                    """)
+        else:
+            if max(self.col_spec) > len(contents.columns):
+                raise ValueError(f"""
+                    Non-existent column indices: {', '.join([str(x) for x in self.col_spec if x > len(contents.columns)])}
+                    Highest column index in source: {len(contents.columns)}
+                    """)
+
+        # convert indices to column headers
+        columns_to_pseudonymize = []
+        if self.col_spec_type == "int":
+            for index in self.col_spec:
+                columns_to_pseudonymize.append(contents.columns[index])
+        else:
+            columns_to_pseudonymize = self.col_spec
+
+        # go through all rows
+        for index, row in contents.iterrows():
+            # go through updateable columns
+            for column in columns_to_pseudonymize:
+                # substitute
+                contents.at[index,column] = self.substitute_string(contents.at[index,column])
+
+        substituted_contents = contents.to_csv(path_or_buf=None,index=False)
+
+        if self.copy == False:
+            # remove the original file
+            self._remove_file(source)
+
+        # write processed file
+        self._write_file(target, substituted_contents)
+
+
+if __name__ == '__main__':
+    import csv
+    from pathlib import Path
+    import re
+
+    from anonymouus import Anonymize
+    key_csv = '/data/youth/test/mapping.csv'
+    df_key = pd.read_csv(key_csv,index_col='ident')
+    anym = Anonymize(key_csv,flags=re.IGNORECASE,use_word_boundaries=True)
+
+    # print(anym.substitute_string("are you Maarten Schermer or what?"))
+
+    test_data = Path('/data/youth/test/anon_this')
+    anym.set_col_spec(["naam","q1"])
+    anym.set_col_spec([0,1,2])
+    anym.substitute(test_data,'/data/youth/test/pseudonymised/')
