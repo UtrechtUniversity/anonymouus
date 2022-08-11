@@ -2,6 +2,8 @@ test.py
 .DS_Store
 dummy.py
 notes.txt
+example.py
+example_config.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
