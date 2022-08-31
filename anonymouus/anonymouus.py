@@ -27,10 +27,10 @@ Documentation items
   string compiles as a regex.
 - 'Use word boundaries' no longer works when using pattern, as it is more
   transparent to have users add the \b to their pattern themselves.
-- CSV/XLSX: 'N/A' values will remain 'N/A', but empty cells will also become 'N/A'
+- CSV/XLSX/ODS: 'N/A' values will remain 'N/A', but empty cells will also become 'N/A'
   (TODO: optionally we can invert this by adding 'keep_default_na=False', but we can't
   have it both ways).
-- CSV/XLSX: multiple columns with the same header will receive ".1" etc. suffixes,
+- CSV/XLSX/ODS: multiple columns with the same header will receive ".1" etc. suffixes,
   and only the first will be pseudonymized or excluded (w/o warning).
   (TODO: add 'starts with' option)
 - TODO: exclude hidden files (starting with . / windows?)
@@ -184,13 +184,13 @@ class Anonymize:
         self._cols_consistency(cols_pseudonymize)
         self._cols_sanity_check(cols_pseudonymize)
         self.cols_pseudonymize = self._cols_sanitize(cols_pseudonymize)
-        self.logger.info(f"Column to pseudonymize: {'; '.join(self.cols_pseudonymize)} (CSV and spreadsheets)")
+        self.logger.info(f"Column to pseudonymize: {'; '.join(self.cols_pseudonymize)}")
 
     def set_cols_exclude(self, cols_exclude:list):
         self._cols_consistency(cols_exclude)
         self._cols_sanity_check(cols_exclude)
         self.cols_exclude = self._cols_sanitize(cols_exclude)
-        self.logger.info(f"Column to exclude: {'; '.join(self.cols_exclude)} (CSV and spreadsheets)")
+        self.logger.info(f"Column to exclude: {'; '.join(self.cols_exclude)}")
 
     def set_cols_case_sensitive(self, case_sensitive:bool):
         self.cols_case_sensitive = bool(case_sensitive)
@@ -362,8 +362,8 @@ class Anonymize:
         if extension in [ '.csv' ] and (self.cols_pseudonymize or self.cols_exclude):
             self.logger.info(f"Processing CSV-file '{source}'")
             self._process_csv_file(source, target)
-        elif extension in ['.xlsx']:
-            self.logger.info(f"Processing XLSX '{source}'")
+        elif extension in ['.xlsx','.ods']:
+            self.logger.info(f"Processing spreadsheet '{source}'")
             self._process_xlsx_file(source, target)
         elif extension in ['.txt', '.csv', '.html', '.htm', '.xml', '.json']:
             self.logger.info(f"Processing text based file '{source}'")
