@@ -211,7 +211,6 @@ class Anonymize:
         return cols
 
     def set_spreadsheet_sheets(self, spreadsheet_sheets:list):
-        # default = all
         self.spreadsheet_sheets = spreadsheet_sheets
         self.logger.info(f"Spreadsheet sheets to process: {'; '.join(self.spreadsheet_sheets)}")
 
@@ -490,12 +489,14 @@ class Anonymize:
                     df = pd.DataFrame.from_dict(self.sheet_contents)
                     df.to_excel(writer, sheet_name=sheet, index=False)
 
+                elif len(self.spreadsheet_sheets)>0 and sheet not in self.spreadsheet_sheets:
+                    self.logger.info(f"{os.path.basename(target)}: skipping sheet '{sheet}'.")
+
         # optionally remove the original file
         if self.copy == False:
             self._remove_file(source)
 
         self.logger.info(f"{os.path.basename(target)}: {self.num_of_subs_made:,} substitutions in {self.processed_lines:,} lines.")
-
 
     def _process_csv_file(
         self,
