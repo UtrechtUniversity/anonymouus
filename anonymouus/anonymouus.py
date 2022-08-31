@@ -2,15 +2,39 @@ import csv
 import re
 import shutil
 import tempfile
-import pandas as pd
 import uuid
 import logging
+import os
+import pandas as pd
+import charset_normalizer
 
 from collections import OrderedDict
 from inspect import signature, Parameter
 from pathlib import Path, PosixPath, WindowsPath
 from typing import Callable, Union
 from itertools import groupby
+from datetime import datetime
+
+"""
+Documentation items
+- Code assumes first line in mapping file to be fieldnames (w/o checks or
+  feedback).
+- Only with mapping & no word boundaries: partial double pseudonymization can
+  occur if a pseudonymn of a longer original string contains a shorter original
+  string also in the mapping.
+- 'Use word boundaries' turns original strings into regex's and pre- and append
+  \b for word boundaries. Theoretically this might cause trouble if an original
+  string compiles as a regex.
+- 'Use word boundaries' no longer works when using pattern, as it is more
+  transparent to have users add the \b to their pattern themselves.
+- CSV/XLSX: 'N/A' values will remain 'N/A', but empty cells will also become 'N/A'
+  (TODO: optionally we can invert this by adding 'keep_default_na=False', but we can't
+  have it both ways).
+- CSV/XLSX: multiple columns with the same header will receive ".1" etc. suffixes,
+  and only the first will be pseudonymized or excluded (w/o warning).
+  (TODO: add 'starts with' option)
+- TODO: exclude hidden files (starting with . / windows?)
+"""
 
 def get_logger(name,log_level=logging.INFO,log_file=None):
     # adding logger (screen only)
@@ -41,10 +65,11 @@ class Anonymize:
             zip_format: str='zip',
             preprocess_text: Callable=None,
             log_file: str=None,
+            log_level: int=logging.INFO,
             **kwargs
         ):
 
-        self.logger = get_logger(name=type(self).__name__,log_file=log_file)
+        self.logger = get_logger(name=type(self).__name__,log_file=log_file,log_level=log_level)
 
         # expression behaviour modifiers
         self.flags = flags
@@ -52,11 +77,10 @@ class Anonymize:
         # using word boundaries around pattern or dict keys, avoids
         # substring-matching
         self.use_word_boundaries = use_word_boundaries
+
         # if you use word boundaries, you might want to preprocess the
         # strings. You can do this with preprocess text, that function
         # must have at least one argument for the string itself
-        # mds 2022.08 not sure why we would need a preprocerssor in case of word boundaries
-        # but it might come in handy sometime anyhow.
         self.preprocess_text = preprocess_text
         if callable(self.preprocess_text):
             sig = signature(self.preprocess_text)
@@ -89,36 +113,33 @@ class Anonymize:
 
         if mapping_type is dict:
             self.mapping = mapping
-            self.logger.info(f"Mapping: using dictionary")
+            self.logger.info(f"Method: mapping; using dictionary ({len(self.mapping)} items)")
 
         elif mapping_type in [str, Path, PosixPath, WindowsPath]:
+            self.mapping_file = mapping
             self.mapping = self._convert_csv_to_dict(mapping)
-            self.logger.info(f"Mapping: using file '{mapping}'")
+            self.logger.info(f"Method: mapping; using file: '{self.mapping_file}' ({len(self.mapping):,} items)")
 
         elif callable(mapping):
-            # raise an error if the callable is not accompanied by a
-            # pattern
+            # raise an error if the callable is not accompanied by a pattern
             if pattern is None:
                 raise ValueError('A mapping function can only be used in conjunction with a pattern')
             else:
                 self.mapping = mapping
                 self.mapping_is_function = True
                 self.kwargs = kwargs
-                self.logger.info(f"Mapping: using function '{mapping.__qualname__}'")
+                self.logger.info(f"Method: function; using function: '{mapping.__qualname__}'")
 
         else:
-            msg = 'mapping must be a dictionary, path (str, Path, PosixPath, WindowsPath) ' + \
+            msg = 'Mapping must be a dictionary, path (str, Path, PosixPath, WindowsPath) ' + \
                 f'or function. Found type: {mapping_type}'
             raise TypeError(msg)
 
-        # Word-boundaries: let's add them here, it's a one time
-        # overhead thing. Not the prettiest code.
-        # the regular expression to find certain patterns
-        # mds 2022.08: not sure why there is an explicit switch for word boundaries which just adds to the regex ppl are going
-        # to provide themselves anyway. If they know regex, they'll also know how to add word boundaries to an expression.
         if pattern is not None:
-            if self.use_word_boundaries is True:
-                pattern = r'\b{}\b'.format(pattern)
+            # # have user add boundaries to their pattern themselves
+            # if self.use_word_boundaries is True:
+            #     pattern = r'\b{}\b'.format(pattern)
+            # the regular expression to find certain patterns
             self.pattern = re.compile(pattern, flags=self.flags)
             self.logger.info(f"Matching: using pattern '{self.pattern.pattern}'")
         else:
@@ -129,11 +150,12 @@ class Anonymize:
                 # keys are first: ensures that shorter versions of keys
                 # will not be substituted first if bigger substitutions
                 # are possible
-                # mds 2022.08: but this won't prevent re-substitution of smaller codes in larger ones that were already done.
-                # might be interesting to experiment with using something like unprintable characters to do a first stage
-                # substitution to avoid re-substitutions.
+                # mds 2022.08: this won't prevent re-substitution of smaller
+                # codes in larger ones that were already done.
+                # (only relevant with mapping file and no word boundaries)
                 self._reorder_dict()
-                # add word boundaries if requested
+                # Word-boundaries: let's add them here, it's a one time
+                # overhead thing. Not the prettiest code.
                 if self.use_word_boundaries == True:
                     replacement_list = []
                     for key, value in self.mapping.items():
@@ -153,10 +175,51 @@ class Anonymize:
         self.cols_pseudonymize = []
         self.cols_exclude = []
         self.cols_case_sensitive = False
+        self.spreadsheet_sheets = []
+        self.num_of_subs_made = 0
+        self.subs_grand_total = 0
+        self.processed_files = 0
+
+    def set_cols_pseudonymize(self, cols_pseudonymize:list):
+        self._cols_consistency(cols_pseudonymize)
+        self._cols_sanity_check(cols_pseudonymize)
+        self.cols_pseudonymize = self._cols_sanitize(cols_pseudonymize)
+        self.logger.info(f"Column to pseudonymize: {'; '.join(self.cols_pseudonymize)} (CSV and spreadsheets)")
+
+    def set_cols_exclude(self, cols_exclude:list):
+        self._cols_consistency(cols_exclude)
+        self._cols_sanity_check(cols_exclude)
+        self.cols_exclude = self._cols_sanitize(cols_exclude)
+        self.logger.info(f"Column to exclude: {'; '.join(self.cols_exclude)} (CSV and spreadsheets)")
+
+    def set_cols_case_sensitive(self, case_sensitive:bool):
+        self.cols_case_sensitive = bool(case_sensitive)
+
+    def _cols_consistency(self, cols):
+        if len([x for x in cols if isinstance(x,str)])!=len(cols):
+            raise ValueError("Column indices should be strings (column headers)")
+
+    def _cols_sanity_check(self, cols):
+        multiples = [x for x in [[key,len(list(group))] for key, group in groupby(sorted(cols))] if x[1]>1]
+        if len(multiples)!=0:
+            raise ValueError(f"Column indices are not unique: {'; '.join([str(x[0]) for x in multiples])}")
+
+    def _cols_sanitize(self, cols):
+        cols = list(map(lambda x: x.strip(),cols))
+        cols = list(map(lambda x: re.sub('(\s)+',' ',x),cols))
+        return cols
+
+    def set_spreadsheet_sheets(self, spreadsheet_sheets:list):
+        # default = all
+        self.spreadsheet_sheets = spreadsheet_sheets
+        self.logger.info(f"Spreadsheet sheets to process: {'; '.join(self.spreadsheet_sheets)}")
 
     def _convert_csv_to_dict(self, path_to_csv: str):
-        '''Converts 2-column csv file into dictionary. Left
+        '''
+        Converts 2-column csv file into dictionary. Left
         column contains ids, right column contains substitutions.
+        Be aware: by default, DictReader assumes the first row to be
+        fieldnames.
         '''
         # this nested function takes care of stripping, escaping and
         # converting dict keys into regulare expressions
@@ -176,7 +239,7 @@ class Anonymize:
             return (key, value)
 
         # read csv file
-        reader = csv.DictReader(open(path_to_csv))
+        reader = csv.DictReader(open(path_to_csv),dialect=self._get_csv_dialect(path_to_csv))
         # convert ordered dict into a plain dict, strip any white space
         data = [process_key_value_pair(kvp) for kvp in reader]
 
@@ -198,8 +261,8 @@ class Anonymize:
         target_path: Union[str, Path]=None
         ):
 
-        self.logger.info(f"input path: '{source_path}'")
-        self.logger.info(f"output path: '{target_path}'")
+        self.logger.info(f"Input path: '{source_path}'")
+        self.logger.info(f"Output path: '{target_path}'")
 
         # ensure source_path is a Path object
         if type(source_path) is str:
@@ -235,6 +298,17 @@ class Anonymize:
         # start traversing
         self._traverse_tree(source_path, target_path)
 
+        self.logger.info(f"Made {self.subs_grand_total:,} substitutions in {self.processed_files} files.")
+
+    def substitute_string(self,source: str):
+        if not type(source) is str:
+            raise ValueError("Source is no string")
+
+        if len(source)==0:
+            return
+
+        return self._substitute_ids(source)
+
     def _traverse_tree(self,
         source: Path,
         target: Path
@@ -242,6 +316,7 @@ class Anonymize:
 
         if source.is_file():
             self._process_file(source, target)
+            self.processed_files += 1
         else:
             # this is a folder, rename/create if necessary
             (source, target) = self._process_folder(source, target)
@@ -275,22 +350,29 @@ class Anonymize:
         target: Path
         ):
 
+        if hasattr(self,'mapping_file') and (Path(source) == Path(self.mapping_file)):
+            self.logger.warning(f"Mapping file '{source}' in source folder; skipping.")
+            return
+
         # process target
         target = self._process_target(source, target)
 
         extension = source.suffix
 
         if extension in [ '.csv' ] and (self.cols_pseudonymize or self.cols_exclude):
-            self.logger.info(f"processing CSV-file '{source}'")
+            self.logger.info(f"Processing CSV-file '{source}'")
             self._process_csv_file(source, target)
+        elif extension in ['.xlsx']:
+            self.logger.info(f"Processing XLSX '{source}'")
+            self._process_xlsx_file(source, target)
         elif extension in ['.txt', '.csv', '.html', '.htm', '.xml', '.json']:
-            self.logger.info(f"processing text based file '{source}'")
+            self.logger.info(f"Processing text based file '{source}'")
             self._process_txt_based_file(source, target)
         elif extension in ['.zip', '.gzip', '.gz']:
-            self.logger.info(f"processing archive '{source}'")
+            self.logger.info(f"Processing archive '{source}'")
             self._process_zip_file(source, target, extension)
         else:
-            self.logger.info(f"processing unknown type '{source}'")
+            self.logger.info(f"Processing unknown type '{source}'")
             self._process_unknown_file_type(source, target)
 
     def _process_target(
@@ -316,14 +398,18 @@ class Anonymize:
         ):
         # read contents
         contents = self._read_file(source)
+
         # substitute
+        self.num_of_subs_made = 0
         substituted_contents = [self._substitute_ids(line) for line in contents]
+
         if self.copy == False:
             # remove the original file
             self._remove_file(source)
-            self.logger.info(f"removed '{source}'")
+            self.logger.info(f"Removed '{source}'")
         # write processed file
         self._write_file(target, substituted_contents)
+        self.logger.info(f"{os.path.basename(target)}: {self.num_of_subs_made:,} substitutions in {len(contents)} lines.")
 
     def _process_unknown_file_type(
         self,
@@ -374,17 +460,137 @@ class Anonymize:
             # remove original zipfile if we are not producing a copy
             if self.copy == False:
                 self._remove_file(source)
-                self.logger.info(f"removed '{source}'")
+                self.logger.info(f"Removed '{source}'")
+
+    def _process_xlsx_file(
+        self,
+        source: Path,
+        target: Path
+        ):
+
+        xlsx = pd.read_excel(source,sheet_name=None,index_col=None)
+
+        with pd.ExcelWriter(target) as writer:
+            for sheet in xlsx:
+                if len(self.spreadsheet_sheets)==0 or sheet in self.spreadsheet_sheets:
+                    self.sheet_source = f"{source} > {sheet}"
+                    self.sheet_contents = xlsx[sheet]
+
+                    # process contents
+                    self._process_sheet()
+
+                    # remove unwanted columns
+                    self._exclude_columns()
+
+                    # convert to dataframe and write
+                    df = pd.DataFrame.from_dict(self.sheet_contents)
+                    df.to_excel(writer, sheet_name=sheet, index=False)
+
+        # optionally remove the original file
+        if self.copy == False:
+            self._remove_file(source)
+
+        self.logger.info(f"{os.path.basename(target)}: {self.num_of_subs_made:,} substitutions in {len(self.sheet_contents):,} lines.")
+
+
+    def _process_csv_file(
+        self,
+        source: Path,
+        target: Path
+        ):
+
+        # read contents
+        self.sheet_contents = pd.read_csv(
+            source,
+            dtype=str,
+            dialect=self._get_csv_dialect(source),
+            encoding=self._get_file_encoding(source)
+            )
+
+        # process contents
+        self.sheet_source = source
+        self._process_sheet()
+
+        # remove unwanted columns
+        self._exclude_columns()
+
+        # convert to CSV and write
+        self._write_file(target, self.sheet_contents.to_csv(path_or_buf=None, index=False))
+
+        # optionally, remove the original file
+        if self.copy == False:
+            self._remove_file(source)
+
+        self.logger.info(f"{os.path.basename(target)}: {self.num_of_subs_made:,} substitutions in {len(self.sheet_contents):,} lines.")
+
+
+    def _process_sheet(self):
+
+        self.sheet_contents.columns = self._cols_sanitize(self.sheet_contents.columns)
+
+        if not self.cols_case_sensitive:
+            self.sheet_contents.columns = list(map(lambda x: x.lower(),self.sheet_contents.columns))
+            self.cols_pseudonymize = list(map(lambda x: x.lower(),self.cols_pseudonymize))
+            self.cols_exclude = list(map(lambda x: x.lower(),self.cols_exclude))
+
+        if len(self.cols_pseudonymize)>0:
+            # detect columns that don't actually exist in source files
+            missing_cols = [x for x in self.cols_pseudonymize if x not in self.sheet_contents.columns ]
+            if len(missing_cols)>0:
+                # raise ValueError(f"Some column(s) do not exist in {source}: {'; '.join(missing_cols)}. Valid columns: {'; '.join(header_line)}")
+                self.logger.warning(f"{self.sheet_source}: column(s) to pseudonymize do not exist: {'; '.join(missing_cols)}")
+
+            columns_to_pseudonymize = self.cols_pseudonymize
+        else:
+            # do all columns
+            columns_to_pseudonymize = list(contents.columns)
+
+        self.num_of_subs_made = 0
+
+        # go through all rows
+        for index, row in self.sheet_contents.iterrows():
+            # go through updatable columns
+            for column in columns_to_pseudonymize:
+                # if column actually exists in source
+                if column in self.sheet_contents.columns:
+                    # substitute
+                    self.sheet_contents.at[index,column] = self.substitute_string(self.sheet_contents.at[index,column])
+
+    def _exclude_columns(self):
+        if len(self.cols_exclude)==0:
+            return
+
+        columns_to_exclude = []
+
+        for column in self.cols_exclude:
+            if column in self.sheet_contents.columns:
+                columns_to_exclude.append(list(self.sheet_contents.columns).index(column))
+
+        if len(columns_to_exclude)==0:
+            return
+
+        self.sheet_contents.drop(self.sheet_contents.columns[columns_to_exclude], axis=1, inplace=True)
+
+    def _get_csv_dialect(self,path_to_file):
+        with open(path_to_file,encoding=self._get_file_encoding(path_to_file)) as csvfile:
+            dialect = csv.Sniffer().sniff(csvfile.read(1024))
+        return dialect
+
+    def _get_file_encoding(self,path_to_file):
+        with open(path_to_file,'rb') as f:
+            data = f.read()  # or a chunk, f.read(1000000)
+        encoding=charset_normalizer.detect(data).get("encoding")
+        return encoding
 
     def _substitute_ids(self, string: str):
         '''Heart of this class: all matches of the regular expression will be
         substituted for the corresponding value in the id-dictionary'''
+
         # preprocess if necessary
         if callable(self.preprocess_text):
             string = self.preprocess_text(string)
 
         if self.pattern is False:
-            #
             # This might be more efficient:
             # https://en.wikipedia.org/wiki/Aho%E2%80%93Corasick_algorithm
             #
@@ -393,27 +599,32 @@ class Anonymize:
             for key, value in self.mapping.items():
                 if type(key) is re.Pattern:
                     key = key.pattern
-                string = re.sub(key, str(value), string, flags=self.flags)
-
+                string, num_of_subs_made = re.subn(key, str(value), string, flags=self.flags)
+                self._update_subs_count(num_of_subs_made)
         else:
-
             if self.mapping_is_function:
                 # if there is a mapping function involved, we will use that
-                string = self.pattern.sub(
+                string, num_of_subs_made = self.pattern.subn(
                     lambda match: self.mapping(match.group(), **self.kwargs),
                     string
                 )
+                self._update_subs_count(num_of_subs_made)
             else:
                 # identify patterns and substitute them with appropriate substitute
-                string = self.pattern.sub(
+                string, num_of_subs_made = self.pattern.subn(
                     lambda match: self.mapping.get(
                         match.group(),
                         match.group()
                     ),
                     string
                 )
+                self._update_subs_count(num_of_subs_made)
 
         return string
+
+    def _update_subs_count(self,num):
+        self.num_of_subs_made += num
+        self.subs_grand_total += num
 
     # FILE OPERATIONS, OVERRIDE THESE IF APPLICABLE
     def _make_dir(self, path: Path):
@@ -429,7 +640,7 @@ class Anonymize:
         f = open(path, 'w', encoding='utf-8')
         f.writelines(contents)
         f.close()
-        self.logger.info(f"wrote '{path}'")
+        self.logger.info(f"Wrote '{path}'")
 
     def _remove_file(self, path: Path):
         path.unlink()
@@ -444,137 +655,44 @@ class Anonymize:
         if source != target:
             shutil.copy(source, target)
 
-    def set_cols_pseudonymize(self, cols_pseudonymize:list):
-        self._cols_consistency(cols_pseudonymize)
-        self._cols_sanity_check(cols_pseudonymize)
-        self.cols_pseudonymize = list(map(lambda x: x.strip(),cols_pseudonymize))
-        self.logger.info(f"CSV-columns to pseudonymize: {'; '.join(self.cols_pseudonymize)}")
-
-    def set_cols_exclude(self, cols_exclude:list):
-        self._cols_consistency(cols_exclude)
-        self._cols_sanity_check(cols_exclude)
-        self.cols_exclude = list(map(lambda x: x.strip(),cols_exclude))
-        self.logger.info(f"CSV-columns to exclude: {'; '.join(self.cols_exclude)}")
-
-    def set_cols_case_sensitive(self, case_sensitive:bool):
-        self.cols_case_sensitive = bool(case_sensitive)
-
-    def substitute_string(self,source: str):
-        if not type(source) is str:
-            raise ValueError("Source is no string")
-
-        if len(source)==0:
-            return
-
-        return self._substitute_ids(source)
-
-    def _cols_consistency(self,cols):
-        if len([x for x in cols if isinstance(x,str)])!=len(cols):
-            raise ValueError("Column indices should be strings (column headers)")
-
-    def _cols_sanity_check(self,cols):
-        multiples = [x for x in [[key,len(list(group))] for key, group in groupby(sorted(cols))] if x[1]>1]
-        if len(multiples)!=0:
-            raise ValueError(f"Column indices are not unique: {'; '.join([str(x[0]) for x in multiples])}")
-
-    def _process_csv_file(
-        self,
-        source: Path,
-        target: Path
-        ):
-
-        # read contents
-        contents = pd.read_csv(source, dtype=str)
-
-        # also fetch a header line that allows double column names
-        # (pd.read_csv() adds ".1" etc. to doubles)
-        with open(source) as f:
-          reader = csv.reader(f)
-          original_header_line = next(reader)
-          original_header_line = list(map(lambda x: x.strip(),original_header_line))
-
-        contents.columns = map(lambda x: x.strip(),contents.columns)
-
-        if not self.cols_case_sensitive:
-            contents.columns = map(lambda x: x.lower(),contents.columns)
-            self.cols_pseudonymize = list(map(lambda x: x.lower(),self.cols_pseudonymize))
-            self.cols_exclude = list(map(lambda x: x.lower(),self.cols_exclude))
-
-        # scan header line to detect ambiguous column names
-        # (i.e. multiple columns with the same header)
-        if not self.cols_case_sensitive:
-            self.header_line = map(lambda x: x.lower(),original_header_line)
-        else:
-            self.header_line = original_header_line
-
-        multiples = [x for x in [[key,len(list(group))] for key, group in groupby(sorted(self.header_line))] if x[1]>1]
-        subst_multiples = [x for x in multiples if x[0] in self.cols_pseudonymize]
-        if len(subst_multiples)!=0:
-            self.logger.warning(f"{source}: ambiguous column(s): {'; '.join([ f'{str(x[0])} ({str(x[1])}x)' for x in subst_multiples])}. Only the first instance(s) will be pseudonymised.")
-
-        if len(self.cols_pseudonymize)>0:
-            # detect columns that don't actually exist in source files
-            missing_cols = [x for x in self.cols_pseudonymize if x not in contents.columns ]
-            if len(missing_cols)>0:
-                # raise ValueError(f"Some column(s) do not exist in {source}: {'; '.join(missing_cols)}. Valid columns: {'; '.join(header_line)}")
-                self.logger.warning(f"{source}: column(s) to pseudonymize do not exist: {'; '.join(missing_cols)}")
-
-            columns_to_pseudonymize = self.cols_pseudonymize
-        else:
-            columns_to_pseudonymize = list(contents.columns)
-
-        # go through all rows
-        for index, row in contents.iterrows():
-            # go through updatable columns
-            for column in columns_to_pseudonymize:
-                # if column actually exists in source
-                if column in contents.columns:
-                    # substitute
-                    contents.at[index,column] = self.substitute_string(contents.at[index,column])
-
-        # convert pseudonymised data to CSV, using the original header
-        self.substituted_contents = contents.to_csv(path_or_buf=None,index=False,header=original_header_line)
-
-        # remove unwanted columns
-        self._exclude_columns()
-
-        if self.copy == False:
-            # remove the original file
-            self._remove_file(source)
-
-        # write processed file
-        self._write_file(target, self.substituted_contents)
-
-    def _exclude_columns(self):
-        if len(self.cols_exclude)==0:
-            return
-
-        columns_to_delete = []
-
-        for column in self.cols_exclude:
-            if column in self.header_line:
-                columns_to_delete.append(self.header_line.index(column))
-
-        if len(columns_to_delete)==0:
-            return
-
-        new_lines = []
-        reader = csv.reader(self.substituted_contents.splitlines())
-        for line in list(reader):
-            new_lines.append([x for key,x in enumerate(line) if not key in columns_to_delete])
-
-        self.substituted_contents = pd.DataFrame(new_lines).to_csv(path_or_buf=None,index=False,header=None)
-
 
 class AdHocCodeMapper:
 
-    translation_table_file = None
+    mapping_result_file = None
     code_generator_function = None
+    buffer_max = 1000
     memory = []
 
-    def __init__(self,translation_table_file,log_file):
-        self.logger = get_logger(name=type(self).__name__,log_file=log_file)
-        self.translation_table_file = translation_table_file
+    def __init__(self,mapping_result_file,log_file,log_level=logging.INFO):
+        self.logger = get_logger(name=type(self).__name__,log_file=log_file,log_level=log_level)
+        self.mapping_result_file = mapping_result_file
+        self._backup_existing_result_file()
+
+        try:
+            open(mapping_result_file, "w")
+        except Exception as e:
+            # unlink(self.backup_file)
+            raise e
+
+    def __del__(self):
+        self.write_translation_table(flush=True)
+        self.logger.info(f"Wrote {len(self.memory):,} pseudonyms to '{self.mapping_result_file}'")
+
+    def _backup_existing_result_file(self):
+        f = Path(self.mapping_result_file)
+        if not f.is_file():
+            return
+
+        self.backup_file = Path(self.mapping_result_file)
+
+        while self.backup_file.is_file():
+            now = datetime.now()
+            stamp = now.strftime("%Y-%m-%d-%H:%M:%S")
+            filename, file_extension = os.path.splitext(self.mapping_result_file)
+            self.backup_file = Path(f"{filename}--{stamp}{file_extension}")
+
+        os.rename(self.mapping_result_file,self.backup_file)
+        self.logger.info(f"Backed up previous mapping result file to '{self.backup_file}'")
 
     def set_code_generator(self,function):
         '''
@@ -595,30 +713,30 @@ class AdHocCodeMapper:
     def get_translation_table(self):
         return self.memory
 
-    def write_translation_table(self):
-        if len(self.memory)>0:
+    def write_translation_table(self,flush=False):
+        if (len(self.memory)>0) and ((len(self.memory) % self.buffer_max == 0) or flush):
             keys = self.memory[0].keys()
-            with open(self.translation_table_file, 'w', newline='') as output_file:
+            with open(self.mapping_result_file, 'w', newline='') as output_file:
                 dict_writer = csv.DictWriter(output_file, keys)
                 dict_writer.writeheader()
                 dict_writer.writerows(self.memory)
-            self.logger.info(f"Wrote to translation table to '{self.translation_table_file}'")
-        else:
-            self.logger.error("Nothing to write: made no substitutions.")
+            self.logger.debug(f"Wrote {len(self.memory)} pseudonyms...")
 
     def subtitute(self,string):
         mem = [x for x in self.memory if x['original']==string]
         if len(mem)==1:
-            return mem[0]['pseudonym']
+            pseudonym = mem[0]['pseudonym']
         elif len(mem)>1:
             raise ValueError(f"Double entry!? {self.memory}")
         else:
             if self.code_generator_function:
-                out = self.code_generator_function(string)
+                pseudonym = self.code_generator_function(string)
             else:
-                out = self._code_generator()
-            self.memory.append({'original':string,'pseudonym':out})
-            return out
+                pseudonym = self._code_generator()
+            self.memory.append({'original':string,'pseudonym':pseudonym})
+            self.write_translation_table()
+
+        return pseudonym
 
     def _code_generator(self):
         return str(uuid.uuid4())
