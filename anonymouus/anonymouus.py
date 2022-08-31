@@ -178,6 +178,7 @@ class Anonymize:
         self.spreadsheet_sheets = []
         self.num_of_subs_made = 0
         self.subs_grand_total = 0
+        self.processed_lines = 0
         self.processed_files = 0
 
     def set_cols_pseudonymize(self, cols_pseudonymize:list):
@@ -470,6 +471,9 @@ class Anonymize:
 
         xlsx = pd.read_excel(source,sheet_name=None,index_col=None)
 
+        self.num_of_subs_made = 0
+        self.processed_lines = 0
+
         with pd.ExcelWriter(target) as writer:
             for sheet in xlsx:
                 if len(self.spreadsheet_sheets)==0 or sheet in self.spreadsheet_sheets:
@@ -490,7 +494,7 @@ class Anonymize:
         if self.copy == False:
             self._remove_file(source)
 
-        self.logger.info(f"{os.path.basename(target)}: {self.num_of_subs_made:,} substitutions in {len(self.sheet_contents):,} lines.")
+        self.logger.info(f"{os.path.basename(target)}: {self.num_of_subs_made:,} substitutions in {self.processed_lines:,} lines.")
 
 
     def _process_csv_file(
@@ -508,6 +512,8 @@ class Anonymize:
             )
 
         # process contents
+        self.num_of_subs_made = 0
+        self.processed_lines = 0
         self.sheet_source = source
         self._process_sheet()
 
@@ -521,7 +527,7 @@ class Anonymize:
         if self.copy == False:
             self._remove_file(source)
 
-        self.logger.info(f"{os.path.basename(target)}: {self.num_of_subs_made:,} substitutions in {len(self.sheet_contents):,} lines.")
+        self.logger.info(f"{os.path.basename(target)}: {self.num_of_subs_made:,} substitutions in {self.processed_lines:,} lines.")
 
 
     def _process_sheet(self):
@@ -545,8 +551,6 @@ class Anonymize:
             # do all columns
             columns_to_pseudonymize = list(contents.columns)
 
-        self.num_of_subs_made = 0
-
         # go through all rows
         for index, row in self.sheet_contents.iterrows():
             # go through updatable columns
@@ -555,6 +559,7 @@ class Anonymize:
                 if column in self.sheet_contents.columns:
                     # substitute
                     self.sheet_contents.at[index,column] = self.substitute_string(self.sheet_contents.at[index,column])
+            self.processed_lines += 1
 
     def _exclude_columns(self):
         if len(self.cols_exclude)==0:
