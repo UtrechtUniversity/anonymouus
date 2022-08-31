@@ -175,7 +175,8 @@ class Anonymize:
         self.cols_pseudonymize = []
         self.cols_exclude = []
         self.cols_case_sensitive = False
-        self.spreadsheet_sheets = []
+        self.spread_sheets_pseudonymize = []
+        self.spread_sheets_exclude = []
         self.num_of_subs_made = 0
         self.subs_grand_total = 0
         self.processed_lines = 0
@@ -210,9 +211,13 @@ class Anonymize:
         cols = list(map(lambda x: re.sub('(\s)+',' ',x),cols))
         return cols
 
-    def set_spreadsheet_sheets(self, spreadsheet_sheets:list):
-        self.spreadsheet_sheets = spreadsheet_sheets
-        self.logger.info(f"Spreadsheet sheets to process: {'; '.join(self.spreadsheet_sheets)}")
+    def set_spread_sheets_pseudonymize(self, spread_sheets_pseudonymize:list):
+        self.spread_sheets_pseudonymize = spread_sheets_pseudonymize
+        self.logger.info(f"Spreadsheet sheets to pseudonymize: {'; '.join(self.spread_sheets_pseudonymize)}")
+
+    def set_spread_sheets_exclude(self, spread_sheets_exclude:list):
+        self.spread_sheets_exclude = spread_sheets_exclude
+        self.logger.info(f"Spreadsheet sheets to exclude: {'; '.join(self.spread_sheets_exclude)}")
 
     def _convert_csv_to_dict(self, path_to_csv: str):
         '''
@@ -475,7 +480,11 @@ class Anonymize:
 
         with pd.ExcelWriter(target) as writer:
             for sheet in xlsx:
-                if len(self.spreadsheet_sheets)==0 or sheet in self.spreadsheet_sheets:
+                if sheet in self.spread_sheets_exclude:
+                    self.logger.info(f"{os.path.basename(target)}: excluding sheet '{sheet}'.")
+                    continue
+
+                if len(self.spread_sheets_pseudonymize)==0 or sheet in self.spread_sheets_pseudonymize:
                     self.sheet_source = f"{source} > {sheet}"
                     self.sheet_contents = xlsx[sheet]
 
@@ -489,7 +498,7 @@ class Anonymize:
                     df = pd.DataFrame.from_dict(self.sheet_contents)
                     df.to_excel(writer, sheet_name=sheet, index=False)
 
-                elif len(self.spreadsheet_sheets)>0 and sheet not in self.spreadsheet_sheets:
+                elif len(self.spread_sheets_pseudonymize)>0 and sheet not in self.spread_sheets_pseudonymize:
                     self.logger.info(f"{os.path.basename(target)}: skipping sheet '{sheet}'.")
 
         # optionally remove the original file
