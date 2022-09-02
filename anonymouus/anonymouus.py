@@ -592,16 +592,23 @@ class Anonymize:
         if len(self.cols_exclude)==0:
             return
 
-        columns_to_exclude = []
+        if self.cols_match_style == 'starts_with':
+            columns_to_exclude = []
+            for column in self.cols_exclude:
+                columns_to_exclude = columns_to_exclude + [x for x in self.sheet_contents.columns if x.startswith(column)]
+        else:
+            columns_to_exclude = self.cols_exclude
 
-        for column in self.cols_exclude:
+        exclude = []
+
+        for column in columns_to_exclude:
             if column in self.sheet_contents.columns:
-                columns_to_exclude.append(list(self.sheet_contents.columns).index(column))
+                exclude.append(list(self.sheet_contents.columns).index(column))
 
-        if len(columns_to_exclude)==0:
+        if len(exclude)==0:
             return
 
-        self.sheet_contents.drop(self.sheet_contents.columns[columns_to_exclude], axis=1, inplace=True)
+        self.sheet_contents.drop(self.sheet_contents.columns[exclude], axis=1, inplace=True)
 
     def _get_csv_dialect(self,path_to_file):
         with open(path_to_file,encoding=self._get_file_encoding(path_to_file)) as csvfile:
