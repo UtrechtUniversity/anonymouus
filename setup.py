@@ -10,11 +10,11 @@ setup(
     long_description = long_description,
     long_description_content_type = "text/markdown",
     url='https://github.com/UtrechtUniversity/anonymouus',
-    author='M.D. Schermer',
+    author='C.S. Kaandorp, M.D. Schermer',
     author_email='m.d.schermer@uu.nl',
     license='MIT',
     packages=['anonymouus'],
-    python_requires = '>=3.6',
+    python_requires = '>=3.10',
     zip_safe=False,
-    install_requires=['pandas','charset_normalizer']
+    install_requires=['pandas','charset_normalizer','xlrd','odfpy','openpyxl','xlsxwriter']
 )

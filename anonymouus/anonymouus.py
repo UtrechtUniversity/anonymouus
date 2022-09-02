@@ -27,13 +27,12 @@ Documentation items
   string compiles as a regex.
 - 'Use word boundaries' no longer works when using pattern, as it is more
   transparent to have users add the \b to their pattern themselves.
-- CSV/XLSX/ODS: 'N/A' values will remain 'N/A', but empty cells will also become 'N/A'
-  (TODO: optionally we can invert this by adding 'keep_default_na=False', but we can't
-  have it both ways).
-- CSV/XLSX/ODS: multiple columns with the same header will receive ".1" etc. suffixes,
+- CSV/XLS(X)/ODS: multiple columns with the same header will receive ".1" etc. suffixes,
   and only the first will be pseudonymized or excluded (w/o warning).
-  (TODO: add 'starts with' option)
-- TODO: exclude hidden files (starting with . / windows?)
+  'starts with' option allows more flexibility.
+- Be aware that *all* files are copied to the target directory, including those
+  that cannot be processed. This may include hidden files or files of which the
+  name starts with a period.
 """
 
 def get_logger(name,log_level=logging.INFO,log_file=None):
@@ -174,9 +173,10 @@ class Anonymize:
 
         self.cols_pseudonymize = []
         self.cols_exclude = []
-        self.cols_case_sensitive = False
         self.spread_sheets_pseudonymize = []
         self.spread_sheets_exclude = []
+        self.cols_case_sensitive = False
+        self.cols_match_style = 'exact'
         self.num_of_subs_made = 0
         self.subs_grand_total = 0
         self.processed_lines = 0
@@ -186,27 +186,36 @@ class Anonymize:
         self._cols_consistency(cols_pseudonymize)
         self._cols_sanity_check(cols_pseudonymize)
         self.cols_pseudonymize = self._cols_sanitize(cols_pseudonymize)
-        self.logger.info(f"Column to pseudonymize: {'; '.join(self.cols_pseudonymize)}")
+        self.logger.info(f"Column(s) to pseudonymize: {'; '.join(self.cols_pseudonymize)}")
 
     def set_cols_exclude(self, cols_exclude:list):
         self._cols_consistency(cols_exclude)
         self._cols_sanity_check(cols_exclude)
         self.cols_exclude = self._cols_sanitize(cols_exclude)
-        self.logger.info(f"Column to exclude: {'; '.join(self.cols_exclude)}")
+        self.logger.info(f"Column(s) to exclude: {'; '.join(self.cols_exclude)}")
 
     def set_cols_case_sensitive(self, case_sensitive:bool):
         self.cols_case_sensitive = bool(case_sensitive)
+        self.logger.info(f"Column headers case sensitive: {self.cols_case_sensitive}")
 
-    def _cols_consistency(self, cols):
+    def set_cols_match_style(self, cols_match_style:str):
+        cols_match_styles = ['exact','starts_with']
+        if cols_match_style in cols_match_styles:
+            self.cols_match_style = cols_match_style
+        else:
+            raise ValueError(f"Invalid column match style: '{cols_match_style}'; valid values: {'; '.join(cols_match_styles)}")
+        self.logger.info(f"Column headers match style: {self.cols_match_style}")
+
+    def _cols_consistency(self, cols:list):
         if len([x for x in cols if isinstance(x,str)])!=len(cols):
             raise ValueError("Column indices should be strings (column headers)")
 
-    def _cols_sanity_check(self, cols):
+    def _cols_sanity_check(self, cols:list):
         multiples = [x for x in [[key,len(list(group))] for key, group in groupby(sorted(cols))] if x[1]>1]
         if len(multiples)!=0:
             raise ValueError(f"Column indices are not unique: {'; '.join([str(x[0]) for x in multiples])}")
 
-    def _cols_sanitize(self, cols):
+    def _cols_sanitize(self, cols:list):
         cols = list(map(lambda x: x.strip(),cols))
         cols = list(map(lambda x: re.sub('(\s)+',' ',x),cols))
         return cols
@@ -364,13 +373,13 @@ class Anonymize:
 
         extension = source.suffix
 
-        if extension in [ '.csv' ] and (self.cols_pseudonymize or self.cols_exclude):
+        if extension in ['.csv']:
             self.logger.info(f"Processing CSV-file '{source}'")
             self._process_csv_file(source, target)
-        elif extension in ['.xlsx','.ods']:
+        elif extension in ['.xls','.xlsx','.ods']:
             self.logger.info(f"Processing spreadsheet '{source}'")
             self._process_xlsx_file(source, target)
-        elif extension in ['.txt', '.csv', '.html', '.htm', '.xml', '.json']:
+        elif extension in ['.txt', '.html', '.htm', '.xml', '.json']:
             self.logger.info(f"Processing text based file '{source}'")
             self._process_txt_based_file(source, target)
         elif extension in ['.zip', '.gzip', '.gz']:
@@ -473,7 +482,7 @@ class Anonymize:
         target: Path
         ):
 
-        xlsx = pd.read_excel(source,sheet_name=None,index_col=None)
+        xlsx = pd.read_excel(source,sheet_name=None,index_col=None,keep_default_na=False)
 
         self.num_of_subs_made = 0
         self.processed_lines = 0
@@ -539,24 +548,32 @@ class Anonymize:
 
         self.logger.info(f"{os.path.basename(target)}: {self.num_of_subs_made:,} substitutions in {self.processed_lines:,} lines.")
 
-
     def _process_sheet(self):
-
+        # clean up sheet's column headers
         self.sheet_contents.columns = self._cols_sanitize(self.sheet_contents.columns)
 
+        # make everything lower if not case-sensitive
         if not self.cols_case_sensitive:
             self.sheet_contents.columns = list(map(lambda x: x.lower(),self.sheet_contents.columns))
             self.cols_pseudonymize = list(map(lambda x: x.lower(),self.cols_pseudonymize))
             self.cols_exclude = list(map(lambda x: x.lower(),self.cols_exclude))
 
         if len(self.cols_pseudonymize)>0:
+            # selected columns to pseudonymize
+            if self.cols_match_style == 'starts_with':
+                # find matches if 'starts_with' (useful for repeating column headers)
+                columns_to_pseudonymize = []
+                for column in self.cols_pseudonymize:
+                    columns_to_pseudonymize = columns_to_pseudonymize + [x for x in self.sheet_contents.columns if x.startswith(column)]
+            else:
+                # use literal
+                columns_to_pseudonymize = self.cols_pseudonymize
+
             # detect columns that don't actually exist in source files
             missing_cols = [x for x in self.cols_pseudonymize if x not in self.sheet_contents.columns ]
             if len(missing_cols)>0:
                 # raise ValueError(f"Some column(s) do not exist in {source}: {'; '.join(missing_cols)}. Valid columns: {'; '.join(header_line)}")
                 self.logger.warning(f"{self.sheet_source}: column(s) to pseudonymize do not exist: {'; '.join(missing_cols)}")
-
-            columns_to_pseudonymize = self.cols_pseudonymize
         else:
             # do all columns
             columns_to_pseudonymize = list(contents.columns)
@@ -568,7 +585,7 @@ class Anonymize:
                 # if column actually exists in source
                 if column in self.sheet_contents.columns:
                     # substitute
-                    self.sheet_contents.at[index,column] = self.substitute_string(self.sheet_contents.at[index,column])
+                    self.sheet_contents.at[index,column] = self.substitute_string(str(self.sheet_contents.at[index,column]))
             self.processed_lines += 1
 
     def _exclude_columns(self):
@@ -742,7 +759,7 @@ class AdHocCodeMapper:
         if len(mem)==1:
             pseudonym = mem[0]['pseudonym']
         elif len(mem)>1:
-            raise ValueError(f"Double entry!? {self.memory}")
+            raise ValueError(f"AdHocCodeMapper registered double entry!?: {mem}")
         else:
             if self.code_generator_function:
                 pseudonym = self.code_generator_function(string)
@@ -750,7 +767,6 @@ class AdHocCodeMapper:
                 pseudonym = self._code_generator()
             self.memory.append({'original':string,'pseudonym':pseudonym})
             self.write_translation_table()
-
         return pseudonym
 
     def _code_generator(self):

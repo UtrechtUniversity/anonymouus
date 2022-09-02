@@ -1,0 +1,10 @@
+{
+  "pattern" : "\\b(A|B)(\\d){5}\\b",
+  "settings" : {
+    "cols_pseudonymize" : [ "SubjectName" ],
+    "cols_exclude" : [ "IP address", "SubjectAddress" ],
+    "cols_case_sensitive" : 0,
+    "spreadsheet_sheets_pseudonymize" : [ "Sheet_1", "Sheet_2" ],
+    "spreadsheet_sheets_exclude" : [ "IndexValues" ]
+  }
+}
