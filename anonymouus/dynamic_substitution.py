@@ -12,14 +12,15 @@ class DynamicSubstitution:
 
     def __init__(self,
                  log_file,
-                 log_level=logging.INFO
+                 log_level=logging.INFO,
+                **kwargs
                  ):
 
         self.mapping_result_file = None
         self.code_generator_function = None
         self.buffer_max = 1000
         self.memory = []
-        self.duplicate_pseudonyms = 0
+        self.kwargs = kwargs
         self.logger = get_logger(name=type(self).__name__, log_file=log_file,
                                  log_level=log_level)
 
@@ -32,10 +33,10 @@ class DynamicSubstitution:
         '''
         if callable(function):
             sig = signature(function)
-            if len(sig.parameters) != 1:
-                raise RuntimeError("Generator function is required to accept one argument (even if it doesn't actually use it).")
+            if len(sig.parameters) < 1:
+                raise RuntimeError("Generator function needs to accept at least one argument (even if it doesn't actually use it).")
             try:
-                function('test')
+                function('test', **self.kwargs)
                 self.code_generator_function = function
             except Exception as exception:
                 raise RuntimeError(f'Generator function raised error at test: {str(exception)}') from exception
@@ -95,26 +96,14 @@ class DynamicSubstitution:
         elif len(mem) > 1:
             raise ValueError(f"DynamicSubstitution registered double entry!?: {mem}")
         else:
-            loop_counter = 0
-            while True:
-                if self.code_generator_function:
-                    pseudonym = self.code_generator_function(string)
-                else:
-                    pseudonym = self._code_generator()
+            if self.code_generator_function:
+                pseudonym = self.code_generator_function(string, **self.kwargs)
+            else:
+                pseudonym = self._code_generator()
 
-                if len([x for x in self.memory if x['pseudonym'] == pseudonym])==0:
-                    break
-                
-                loop_counter += 1
-
-                if loop_counter >= 5:
-                    self.duplicate_pseudonyms += 1
-                    break
+            if len([x for x in self.memory if x['pseudonym'] == pseudonym])>0:
+                self.logger.warning(f"Generator function generated a duplicate: '{pseudonym}'.")
 
             self.memory.append({'original': string, 'pseudonym': pseudonym})
-
-            if self.duplicate_pseudonyms > 10:
-                self.logger.warning(f"Generator function repeatedly generates duplicates.")
-                self.duplicate_pseudonyms = 0
 
         return pseudonym
