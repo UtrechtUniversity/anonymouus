@@ -94,7 +94,7 @@ class DynamicSubstitution:
         if len(mem) == 1:
             pseudonym = mem[0]['pseudonym']
         elif len(mem) > 1:
-            raise ValueError(f"DynamicSubstitution registered double entry!?: {mem}")
+            raise ValueError(f"DynamicSubstitution registered double entry!? ({mem})")
         else:
             if self.code_generator_function:
                 pseudonym = self.code_generator_function(string, **self.kwargs)

@@ -7,10 +7,11 @@ import os
 import dateutil.parser
 import charset_normalizer
 import pandas as pd
+from pandas import DataFrame
 from collections import OrderedDict
 from inspect import signature, Parameter
 from pathlib import Path, PosixPath, WindowsPath
-from typing import List, Callable, Union, Dict
+from typing import List, Callable, Union, Dict, Tuple, Optional
 from itertools import groupby
 from datetime import datetime
 from utils import get_logger
@@ -39,6 +40,96 @@ Documentation items
   took out XLSX due to engine errors
 
 """
+
+class CsvHandling:
+
+    cols_match_styles = ['exact', 'starts_with']
+
+    def __init__(self,
+                cols_pseudonymize: List[str] = [],
+                cols_exclude: List[str] = [],
+                sheets_pseudonymize: List[str] = [],
+                sheets_exclude: List[str] = [],
+                cols_case_sensitive: bool = False,
+                cols_match_style: str = 'exact'
+    ) -> None:
+        self.set_cols_pseudonymize(cols_pseudonymize)
+        self.set_cols_exclude(cols_exclude)
+        self.set_sheets_pseudonymize(sheets_pseudonymize)
+        self.set_sheets_exclude(sheets_exclude)
+        self.set_cols_case_sensitive(cols_case_sensitive)
+        self.set_cols_match_style(cols_match_style)
+
+    def set_cols_pseudonymize(self, cols_pseudonymize: List[str]):
+        self._cols_consistency(cols_pseudonymize)
+        self._cols_sanity_check(cols_pseudonymize)
+        self.cols_pseudonymize = self.cols_sanitize(cols_pseudonymize)
+
+    def set_cols_exclude(self, cols_exclude: List[str]):
+        self._cols_consistency(cols_exclude)
+        self._cols_sanity_check(cols_exclude)
+        self.cols_exclude = self.cols_sanitize(cols_exclude)
+
+    def set_sheets_pseudonymize(self, sheets_pseudonymize: List[str]):
+        self.sheets_pseudonymize = sheets_pseudonymize
+
+    def set_sheets_exclude(self, sheets_exclude: List[str]):
+        self.sheets_exclude = sheets_exclude
+
+    def set_cols_case_sensitive(self, cols_case_sensitive: bool):
+        if isinstance(cols_case_sensitive, bool):
+            self.cols_case_sensitive = cols_case_sensitive
+        else:
+            raise ValueError("Expected boolean")
+
+    def set_cols_match_style(self, cols_match_style: str):
+        if cols_match_style in self.cols_match_styles:
+            self.cols_match_style = cols_match_style
+        else:
+            raise ValueError("Invalid column match style:" +
+                             f"'{cols_match_style}'; " +
+                             f"valid values: {'; '.join(self.cols_match_styles)}")
+
+    def set_spread_sheets_pseudonymize(self, spread_sheets_pseudonymize: List[str]):
+        self.spread_sheets_pseudonymize = spread_sheets_pseudonymize
+
+    def set_spread_sheets_exclude(self, spread_sheets_exclude: List[str]):
+        self.spread_sheets_exclude = spread_sheets_exclude
+
+    def cols_sanitize(self, cols: List[str]) -> List[str]:
+        cols = list(map(lambda x: x.strip(), cols))
+        cols = list(map(lambda x: re.sub(r'(\s)+', ' ', x), cols))
+        return cols
+
+    def _cols_consistency(self, cols: List[str]):
+        if len([x for x in cols if isinstance(x, str)]) != len(cols):
+            raise ValueError("Column indices should be strings (headers)")
+
+    def _cols_sanity_check(self, cols: List[str]):
+        multiples = [x for x in [[key, len(list(group))]
+                     for key, group in groupby(sorted(cols))] if x[1] > 1]
+        if len(multiples) != 0:
+            raise ValueError("Column indices are not unique: " +
+                             f"{'; '.join([str(x[0]) for x in multiples])}")
+
+
+class DateHandling:
+
+    def __init__(self, 
+                 substitute_dates: bool,
+                 substitute_invalid_dates: bool = False) -> None:
+        self.substitute_dates = substitute_dates
+        # strongly advice to leave 'substitute_invalid_dates' False
+        self.substitute_invalid_dates = substitute_invalid_dates
+        self.patterns = [
+            (r'(\d){4}[-/]{1}(\d){2}[-/]{1}(\d){2}[T\s](\d){2}:(\d){2}:(\d){2}(\.(\d){3})?','1970-01-01T00:00:00'),
+            (r'(\d){4}[-/]{1}(\d){2}[-/]{1}(\d){2}','1970-01-01'),
+            (r'(\d){1,2}[-/\\]{1}(\d){1,2}[-/\\]{1}(\d){4}','01-01-1970'),
+            (r'(\d){8}(_?)(\d){4}','19700101_0000'),
+            (r'(\d){8}[T](\d){6}','19700101T000000'),
+            (r'(\d){2}[.]{1}(\d){2}[.]{1}(\d){4}[\s](\d){2}:(\d){2}:(\d){2}','01.01.1970 00:00:00'),
+            # (r'(\d){8}(\d){4}','197001010000'),
+        ]
 
 
 class Anonymize:
@@ -92,7 +183,7 @@ class Anonymize:
                 ]
                 if any(pars_without_default):
                     raise ValueError("""
-                        preprocess_text must be aassigned to a function with
+                        preprocess_text must be assigned to a function with
                         one positional argument (the first) that takes a
                         string, all other arguments must have a default
                         value.
@@ -100,16 +191,19 @@ class Anonymize:
 
         self.mapping = None
         self.mapping_is_function = False
+        self.mapping_file = None
         # if there is no substitution dictionary then convert the csv
         # substitution table into a dictionary
-        mapping_type = type(mapping)
 
-        if mapping_type is dict:
+        if isinstance(self.mapping, dict):
             self.mapping = mapping
             self.logger.info("Method: mapping; using dictionary (%s items)",
                              len(self.mapping))
 
-        elif mapping_type in [str, Path, PosixPath, WindowsPath]:
+        elif isinstance(self.mapping, str) or \
+             isinstance(self.mapping, Path) or \
+             isinstance(self.mapping, PosixPath) or \
+             isinstance(self.mapping, WindowsPath):
             self.mapping_file = mapping
             self.mapping = self._convert_csv_to_dict(mapping)
             self.logger.info("Method: mapping; using file: '%s' (%s items)",
@@ -130,7 +224,7 @@ class Anonymize:
         else:
             msg = 'Mapping must be a dictionary, path ' + \
                   '(str, Path, PosixPath, WindowsPath) ' + \
-                  f'or function. Found type: {mapping_type}'
+                  f'or function. Found type: {type(mapping)}'
             raise TypeError(msg)
 
         if pattern is not None:
@@ -171,32 +265,10 @@ class Anonymize:
         # Are we going to make a copy?
         self.copy = False
 
-        self.csv_handling = {
-            "cols_pseudonymize": [],
-            "cols_exclude": [],
-            "cols_case_sensitive": False,
-            "cols_match_style": 'exact',
-            "sheets_pseudonymize": [],
-            "sheets_exclude": [],
-        }
-
-        self.sheet_contents = None
-        self.sheet_source = None
-
-        self.date_handling = {
-            "substitute_dates": substitute_dates,
-            # strongly advice to leave 'substitute_invalid_dates' False
-            "substitute_invalid_dates": False,
-            "patterns": [
-                (r'(\d){4}[-/]{1}(\d){2}[-/]{1}(\d){2}[T\s](\d){2}:(\d){2}:(\d){2}(\.(\d){3})?','1970-01-01T00:00:00'),
-                (r'(\d){4}[-/]{1}(\d){2}[-/]{1}(\d){2}','1970-01-01'),
-                (r'(\d){1,2}[-/\\]{1}(\d){1,2}[-/\\]{1}(\d){4}','01-01-1970'),
-                (r'(\d){8}(_?)(\d){4}','19700101_0000'),
-                (r'(\d){8}[T](\d){6}','19700101T000000'),
-                (r'(\d){2}[.]{1}(\d){2}[.]{1}(\d){4}[\s](\d){2}:(\d){2}:(\d){2}','01.01.1970 00:00:00'),
-                # (r'(\d){8}(\d){4}','197001010000'),
-            ],
-        }
+        self.csv_handling = CsvHandling()
+        self.sheet_source: str
+        self.sheet_contents: DataFrame
+        self.date_handling = DateHandling(substitute_dates=substitute_dates)
 
         self.stats = {
             "subs_made": 0,
@@ -207,61 +279,35 @@ class Anonymize:
         }
 
     def set_cols_pseudonymize(self, cols_pseudonymize: List[str]):
-        self._cols_consistency(cols_pseudonymize)
-        self._cols_sanity_check(cols_pseudonymize)
-        self.csv_handling["cols_pseudonymize"] = self._cols_sanitize(cols_pseudonymize)
+        self.csv_handling.set_cols_pseudonymize(cols_pseudonymize)
         self.logger.info("Column(s) to pseudonymize: %s",
-                         '; '.join(self.csv_handling["cols_pseudonymize"]))
+                         '; '.join(self.csv_handling.cols_pseudonymize))
 
     def set_cols_exclude(self, cols_exclude: List[str]):
-        self._cols_consistency(cols_exclude)
-        self._cols_sanity_check(cols_exclude)
-        self.csv_handling["cols_exclude"] = self._cols_sanitize(cols_exclude)
+        self.csv_handling.set_cols_exclude(cols_exclude)
         self.logger.info("Column(s) to exclude: %s",
-                         '; '.join(self.csv_handling["cols_exclude"]))
+                         '; '.join(self.csv_handling.cols_exclude))
 
     def set_cols_case_sensitive(self, case_sensitive: bool):
-        self.csv_handling["cols_case_sensitive"] = bool(case_sensitive)
+        self.csv_handling.set_cols_case_sensitive(bool(case_sensitive))
         self.logger.info("Column headers case sensitive: %s",
-                         self.csv_handling["cols_case_sensitive"])
+                         self.csv_handling.cols_case_sensitive)
 
     def set_cols_match_style(self, cols_match_style: str):
-        cols_match_styles = ['exact', 'starts_with']
-        if cols_match_style in cols_match_styles:
-            self.csv_handling["cols_match_style"] = cols_match_style
-        else:
-            raise ValueError("Invalid column match style:" +
-                             f"'{cols_match_style}'; " +
-                             f"valid values: {'; '.join(cols_match_styles)}")
+        self.csv_handling.set_cols_match_style(cols_match_style)
         self.logger.info("Column headers match style: %s",
-                         self.csv_handling["cols_match_style"])
-
-    def _cols_consistency(self, cols: List[str]):
-        if len([x for x in cols if isinstance(x, str)]) != len(cols):
-            raise ValueError("Column indices should be strings (headers)")
-
-    def _cols_sanity_check(self, cols: List[str]):
-        multiples = [x for x in [[key, len(list(group))]
-                     for key, group in groupby(sorted(cols))] if x[1] > 1]
-        if len(multiples) != 0:
-            raise ValueError("Column indices are not unique: " +
-                             f"{'; '.join([str(x[0]) for x in multiples])}")
-
-    def _cols_sanitize(self, cols: List[str]) -> List[str]:
-        cols = list(map(lambda x: x.strip(), cols))
-        cols = list(map(lambda x: re.sub(r'(\s)+', ' ', x), cols))
-        return cols
+                         self.csv_handling.cols_match_style)
 
     def set_spread_sheets_pseudonymize(self,
                                        spread_sheets_pseudonymize: List[str]):
-        self.csv_handling["sheets_pseudonymize"] = spread_sheets_pseudonymize
+        self.csv_handling.set_spread_sheets_pseudonymize(spread_sheets_pseudonymize)
         self.logger.info("Spreadsheet sheets to pseudonymize: %s",
-                         '; '.join(self.csv_handling["sheets_pseudonymize"]))
+                         '; '.join(self.csv_handling.sheets_pseudonymize))
 
     def set_spread_sheets_exclude(self, spread_sheets_exclude: List[str]):
-        self.csv_handling["sheets_exclude"] = spread_sheets_exclude
+        self.csv_handling.set_spread_sheets_exclude(spread_sheets_exclude)
         self.logger.info("Spreadsheet sheets to exclude: %s",
-                         '; '.join(self.csv_handling["sheets_exclude"]))
+                         '; '.join(self.csv_handling.sheets_exclude))
 
     def _convert_csv_to_dict(self, path_to_csv: Union[str, Path]) -> Dict:
         '''
@@ -377,7 +423,7 @@ class Anonymize:
             for child in source.iterdir():
                 self._traverse_tree(child, target)
 
-    def _process_folder(self, source: Path, target: Path) -> Path:
+    def _process_folder(self, source: Path, target: Path) -> Tuple[Path, Path]:
         result = None
 
         # process target
@@ -396,6 +442,7 @@ class Anonymize:
 
     def _process_file(self, source: Path, target: Path):
         if hasattr(self, 'mapping_file') \
+                and not self.mapping_file is None \
                 and (Path(source) == Path(self.mapping_file)):
             self.logger.warning("Mapping file '%s' in source folder; " +
                                 "skipping.", source)
@@ -470,9 +517,9 @@ class Anonymize:
 
     def _process_zip_file(self, source: Path, target: Path):
         # create a temp folder to extract to
-        with tempfile.TemporaryDirectory() as tmp_folder:
+        with tempfile.TemporaryDirectory() as tmp:
             # turn folder into Path object
-            tmp_folder = Path(tmp_folder)
+            tmp_folder = Path(tmp)
             # extract our archive
             shutil.unpack_archive(source, tmp_folder)
             # this is hacky, but inevitable: I want an in-place
@@ -488,10 +535,10 @@ class Anonymize:
                 shutil.rmtree(macosx_folder, ignore_errors=True)
 
             # perform the substitution
-            self.substitute(Path(tmp_folder))
+            self.substitute(tmp_folder)
             # zip up the substitution
             shutil.make_archive(
-                target.parent / target.with_suffix(''),
+                str(target.parent / target.with_suffix('')),
                 self.zip_format,
                 tmp_folder
             )
@@ -515,13 +562,13 @@ class Anonymize:
 
         with pd.ExcelWriter(target) as writer:
             for sheet in xlsx:
-                if sheet in self.csv_handling["sheets_exclude"]:
+                if sheet in self.csv_handling.sheets_exclude:
                     self.logger.info("%s: excluding sheet '%s'.",
                                      os.path.basename(target), sheet)
                     continue
 
-                if len(self.csv_handling["sheets_pseudonymize"]) == 0 \
-                        or sheet in self.csv_handling["sheets_pseudonymize"]:
+                if len(self.csv_handling.sheets_pseudonymize) == 0 \
+                        or sheet in self.csv_handling.sheets_pseudonymize:
                     self.sheet_source = f"{source} > {sheet}"
                     self.sheet_contents = xlsx[sheet]
 
@@ -535,8 +582,8 @@ class Anonymize:
                     dataframe = pd.DataFrame.from_dict(self.sheet_contents)
                     dataframe.to_excel(writer, sheet_name=sheet, index=False)
 
-                elif len(self.csv_handling["sheets_pseudonymize"]) > 0 \
-                        and sheet not in self.csv_handling["sheets_pseudonymize"]:
+                elif len(self.csv_handling.sheets_pseudonymize) > 0 \
+                        and sheet not in self.csv_handling.sheets_pseudonymize:
                     self.logger.info("%s: skipping sheet '%s'.",
                                      os.path.basename(target), sheet)
 
@@ -561,7 +608,7 @@ class Anonymize:
         # process contents
         self.stats["subs_made"] = 0
         self.stats["processed_lines"] = 0
-        self.sheet_source = source
+        self.sheet_source = str(source)
         self._process_sheet()
 
         # remove unwanted columns
@@ -583,33 +630,33 @@ class Anonymize:
     def _process_sheet(self):
         # clean up sheet's column headers
         self.sheet_contents.columns = \
-            self._cols_sanitize(self.sheet_contents.columns)
+            self.csv_handling.cols_sanitize(self.sheet_contents.columns)
 
         # make everything lower if not case-sensitive
-        if not self.csv_handling["cols_case_sensitive"]:
+        if not self.csv_handling.cols_case_sensitive:
             self.sheet_contents.columns = list(map(lambda x: x.lower(),
                                                self.sheet_contents.columns))
-            self.csv_handling["cols_pseudonymize"] = \
+            self.csv_handling.cols_pseudonymize = \
                 list(map(lambda x: x.lower(),
-                self.csv_handling["cols_pseudonymize"]))
-            self.csv_handling["cols_exclude"] = list(map(lambda x: x.lower(),
-                                     self.csv_handling["cols_exclude"]))
+                self.csv_handling.cols_pseudonymize))
+            self.csv_handling.cols_exclude = list(map(lambda x: x.lower(),
+                                     self.csv_handling.cols_exclude))
 
-        if len(self.csv_handling["cols_pseudonymize"]) > 0:
+        if len(self.csv_handling.cols_pseudonymize) > 0:
             # selected columns to pseudonymize
-            if self.csv_handling["cols_match_style"] == 'starts_with':
+            if self.csv_handling.cols_match_style == 'starts_with':
                 # find matches if 'starts_with' (useful for repeating headers)
                 columns_to_pseudonymize = []
-                for column in self.csv_handling["cols_pseudonymize"]:
+                for column in self.csv_handling.cols_pseudonymize:
                     columns_to_pseudonymize = columns_to_pseudonymize + \
                         [x for x in self.sheet_contents.columns
                          if x.startswith(column)]
             else:
                 # use literal
-                columns_to_pseudonymize = self.csv_handling["cols_pseudonymize"]
+                columns_to_pseudonymize = self.csv_handling.cols_pseudonymize
 
             # detect columns that don't actually exist in source files
-            missing_cols = [x for x in self.csv_handling["cols_pseudonymize"]
+            missing_cols = [x for x in self.csv_handling.cols_pseudonymize
                             if x not in self.sheet_contents.columns]
 
             if len(missing_cols) > 0:
@@ -625,15 +672,16 @@ class Anonymize:
             # go through updatable columns
             for column in columns_to_pseudonymize:
                 # if column actually exists in source
-                if column in self.sheet_contents.columns:
-                    # substitute
-                    self.sheet_contents.at[index, column] = \
-                       self.substitute_string(
-                            str(self.sheet_contents.at[index, column])
-                        )
+                if not column in self.sheet_contents.columns:
+                    continue
+                # substitute
+                self.sheet_contents.at[index, column] = \
+                    self.substitute_string(
+                        str(self.sheet_contents.at[index, column])
+                    )
             self.stats["processed_lines"] += 1
 
-        if self.date_handling["substitute_dates"]:
+        if self.date_handling.substitute_dates:
             # go through all rows
             for index, _ in self.sheet_contents.iterrows():
                 # go through all columns
@@ -644,17 +692,17 @@ class Anonymize:
                         )
 
     def _exclude_columns(self):
-        if len(self.csv_handling["cols_exclude"]) == 0:
+        if len(self.csv_handling.cols_exclude) == 0:
             return
 
-        if self.csv_handling["cols_match_style"] == 'starts_with':
+        if self.csv_handling.cols_match_style == 'starts_with':
             columns_to_exclude = []
-            for column in self.csv_handling["cols_exclude"]:
+            for column in self.csv_handling.cols_exclude:
                 columns_to_exclude = columns_to_exclude + \
                                      [x for x in self.sheet_contents.columns
                                       if x.startswith(column)]
         else:
-            columns_to_exclude = self.csv_handling["cols_exclude"]
+            columns_to_exclude = self.csv_handling.cols_exclude
 
         exclude = []
 
@@ -734,7 +782,7 @@ class Anonymize:
             contents = list(file)
         return contents
 
-    def _write_file(self, path: Path, contents: str):
+    def _write_file(self, path: Path, contents: List[str]):
         with open(path, 'w', encoding='utf-8') as file:
             file.writelines(contents)
         self.logger.info("Wrote '%s", path)
@@ -753,15 +801,15 @@ class Anonymize:
             shutil.copy(source, target)
 
     def _substitute_dates(self, string: str) -> str:
-        if not self.date_handling["substitute_dates"]:
+        if not self.date_handling.substitute_dates:
             return string
 
         new_string = string
 
-        for pattern in self.date_handling["patterns"]:
+        for pattern in self.date_handling.patterns:
             for match in re.finditer(pattern[0], new_string):
                 dtstr = new_string[match.span()[0]:match.span()[1]]
-                if not self.date_handling["substitute_invalid_dates"]:
+                if not self.date_handling.substitute_invalid_dates:
                     try:
                         dt = dateutil.parser.parse(dtstr.replace("_"," "))
                     except Exception as e:
