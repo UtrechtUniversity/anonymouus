@@ -11,7 +11,7 @@ from utils import get_logger
 class DynamicSubstitution:
 
     def __init__(self,
-                 log_file,
+                 log_file=None,
                  log_level=logging.INFO,
                 **kwargs
                  ):
@@ -21,8 +21,9 @@ class DynamicSubstitution:
         self.buffer_max = 1000
         self.memory = []
         self.kwargs = kwargs
-        self.logger = get_logger(name=type(self).__name__, log_file=log_file,
-                                 log_level=log_level)
+        if log_file:
+            self.logger = get_logger(name=type(self).__name__, log_file=log_file,
+                                    log_level=log_level)
 
     def _code_generator(self):
         return str(uuid.uuid4())
