@@ -154,7 +154,7 @@ class Anonymize:
 
         # session id
         self.session_id = session_id if session_id is not None else '{:%Y-%m-%dT%H:%M}'.format(datetime.now())
-        self.session_id = re.sub(r'[^\w_. -:]', '_', self.session_id)
+        self.session_id = re.sub(r'[^\w_ -]', '_', self.session_id)
         self.logger.info("Session ID: %s", self.session_id)
 
         # expression behaviour modifiers
