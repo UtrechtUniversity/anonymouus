@@ -55,7 +55,7 @@ class DynamicSubstitution:
 
         while backup_file.is_file():
             now = datetime.now()
-            stamp = now.strftime("%Y-%m-%d-%H:%M:%S")
+            stamp = now.strftime("%Y-%m-%d-%H%M%S")
             filename, file_extension = os.path.splitext(mapping_result_file)
             backup_file = Path(f"{filename}--{stamp}{file_extension}")
 

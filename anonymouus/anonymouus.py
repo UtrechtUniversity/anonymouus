@@ -773,6 +773,29 @@ class Anonymize:
         self.stats["subs_made"] += num
         self.stats["subs_grand_total"] += num
 
+    def _substitute_dates(self, string: str) -> str:
+        if not self.date_handling.substitute_dates:
+            return string
+
+        new_string = string
+
+        for pattern in self.date_handling.patterns:
+            for match in re.finditer(pattern[0], new_string):
+                dtstr = new_string[match.span()[0]:match.span()[1]]
+                if not self.date_handling.substitute_invalid_dates:
+                    try:
+                        dt = dateutil.parser.parse(dtstr.replace("_"," "))
+                    except Exception as e:
+                        continue
+                replace = pattern[1]
+
+                self.stats["dates"] += 1
+
+                new_string = new_string[:match.span()[0]] + replace \
+                             + new_string[match.span()[1]:]
+
+        return new_string
+
     # FILE OPERATIONS, OVERRIDE THESE IF APPLICABLE
     def _make_dir(self, path: Path):
         path.mkdir(parents=True, exist_ok=True)
@@ -799,26 +822,3 @@ class Anonymize:
     def _copy_file(self, source: Path, target: Path):
         if source != target:
             shutil.copy(source, target)
-
-    def _substitute_dates(self, string: str) -> str:
-        if not self.date_handling.substitute_dates:
-            return string
-
-        new_string = string
-
-        for pattern in self.date_handling.patterns:
-            for match in re.finditer(pattern[0], new_string):
-                dtstr = new_string[match.span()[0]:match.span()[1]]
-                if not self.date_handling.substitute_invalid_dates:
-                    try:
-                        dt = dateutil.parser.parse(dtstr.replace("_"," "))
-                    except Exception as e:
-                        continue
-                replace = pattern[1]
-
-                self.stats["dates"] += 1
-
-                new_string = new_string[:match.span()[0]] + replace \
-                             + new_string[match.span()[1]:]
-
-        return new_string
