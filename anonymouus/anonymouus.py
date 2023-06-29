@@ -14,7 +14,7 @@ from pathlib import Path, PosixPath, WindowsPath
 from typing import List, Callable, Union, Dict, Tuple, Optional
 from itertools import groupby
 from datetime import datetime
-from utils import get_logger
+from anonymouus.utils import get_logger
 
 """
 Documentation items
@@ -154,7 +154,7 @@ class Anonymize:
 
         # session id
         self.session_id = session_id if session_id is not None else '{:%Y-%m-%dT%H:%M}'.format(datetime.now())
-        self.session_id = re.sub(r'[^\w_ -]', '_', self.session_id)
+        self.session_id = re.sub(r'[^\w_-]', '_', self.session_id)[:32]
         self.logger.info("Session ID: %s", self.session_id)
 
         # expression behaviour modifiers

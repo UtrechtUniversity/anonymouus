@@ -1,2 +1,3 @@
 from anonymouus.anonymouus import Anonymize
-from anonymouus.anonymouus import AdHocCodeMapper
+from anonymouus.dynamic_substitution import DynamicSubstitution
+from anonymouus.utils import get_logger

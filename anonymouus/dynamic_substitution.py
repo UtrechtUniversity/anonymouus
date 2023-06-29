@@ -5,14 +5,12 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from inspect import signature
-from utils import get_logger
 
 
 class DynamicSubstitution:
 
     def __init__(self,
-                 log_file=None,
-                 log_level=logging.INFO,
+                 logger=None,
                 **kwargs
                  ):
 
@@ -20,10 +18,18 @@ class DynamicSubstitution:
         self.code_generator_function = None
         self.buffer_max = 1000
         self.memory = []
+        if logger:
+            self.logger = logger
         self.kwargs = kwargs
-        if log_file:
-            self.logger = get_logger(name=type(self).__name__, log_file=log_file,
-                                    log_level=log_level)
+
+    def _log(self, message, level=logging.INFO):
+        if self.logger:
+            if level==logging.ERROR:
+                self.logger.error(message)
+            elif level==logging.WARNING:
+                self.logger.warning(message)
+            else:
+                self.logger.info(message)
 
     def _code_generator(self):
         return str(uuid.uuid4())
@@ -60,11 +66,11 @@ class DynamicSubstitution:
             backup_file = Path(f"{filename}--{stamp}{file_extension}")
 
         os.rename(mapping_result_file, backup_file)
-        self.logger.info(f"Backed up previous mapping result file to '{backup_file}'")
+        self._log(f"Backed up previous mapping result file to '{backup_file}'")
 
     def write_translation_table(self, mapping_result_file):
         if len(self.memory) == 0:
-            self.logger.info("Nothing to write (no pseudonyms recorded)")
+            self._log("Nothing to write (no pseudonyms recorded)")
             return
 
         try:
@@ -82,13 +88,13 @@ class DynamicSubstitution:
             dict_writer.writeheader()
             dict_writer.writerows(self.memory)
 
-        self.logger.info(f"Wrote {len(self.memory):,} pseudonyms to '{mapping_result_file}'")
+        self._log(f"Wrote {len(self.memory):,} pseudonyms to '{mapping_result_file}'")
 
         pseudonyms = len([x['pseudonym'] for x in self.memory])
         pseudonyms_uniq = len(list(set([x['pseudonym'] for x in self.memory])))
 
         if pseudonyms != pseudonyms_uniq:
-            self.logger.warning(f"Generated only {pseudonyms_uniq:,} unique pseudonyms out of a total of {pseudonyms:,}")
+            self._log(f"Generated only {pseudonyms_uniq:,} unique pseudonyms out of a total of {pseudonyms:,}", level=logging.WARNING)
 
     def subtitute(self, string):
         mem = [x for x in self.memory if x['original'] == string]
@@ -103,7 +109,7 @@ class DynamicSubstitution:
                 pseudonym = self._code_generator()
 
             if len([x for x in self.memory if x['pseudonym'] == pseudonym])>0:
-                self.logger.warning(f"Generator function generated a duplicate: '{pseudonym}'.")
+                self._log(f"Generator function generated a duplicate: '{pseudonym}'.", level=logging.WARNING)
 
             self.memory.append({'original': string, 'pseudonym': pseudonym})
 
