@@ -4,7 +4,6 @@ import shutil
 import tempfile
 import logging
 import os
-import dateutil.parser
 import charset_normalizer
 import pandas as pd
 from pandas import DataFrame
@@ -15,6 +14,7 @@ from typing import List, Callable, Union, Dict, Tuple, Optional
 from itertools import groupby
 from datetime import datetime
 from anonymouus.utils import get_logger
+from anonymouus.date_replacer import DateReplacer
 
 """
 Documentation items
@@ -113,25 +113,6 @@ class CsvHandling:
                              f"{'; '.join([str(x[0]) for x in multiples])}")
 
 
-class DateHandling:
-
-    def __init__(self, 
-                 substitute_dates: bool,
-                 substitute_invalid_dates: bool = False) -> None:
-        self.substitute_dates = substitute_dates
-        # strongly advice to leave 'substitute_invalid_dates' False
-        self.substitute_invalid_dates = substitute_invalid_dates
-        self.patterns = [
-            (r'(\d){4}[-/]{1}(\d){2}[-/]{1}(\d){2}[T\s](\d){2}:(\d){2}:(\d){2}(\.(\d){3})?','1970-01-01T00:00:00'),
-            (r'(\d){4}[-/]{1}(\d){2}[-/]{1}(\d){2}','1970-01-01'),
-            (r'(\d){1,2}[-/\\]{1}(\d){1,2}[-/\\]{1}(\d){4}','01-01-1970'),
-            (r'(\d){8}(_?)(\d){4}','19700101_0000'),
-            (r'(\d){8}[T](\d){6}','19700101T000000'),
-            (r'(\d){2}[.]{1}(\d){2}[.]{1}(\d){4}[\s](\d){2}:(\d){2}:(\d){2}','01.01.1970 00:00:00'),
-            # (r'(\d){8}(\d){4}','197001010000'),
-        ]
-
-
 class Anonymize:
 
     def __init__(
@@ -140,7 +121,7 @@ class Anonymize:
             pattern: str = None,
             flags=0,
             use_word_boundaries: bool = True,
-            substitute_dates: bool = True,
+            date_replacer: DateReplacer = None,
             session_id: str = None,
             zip_format: str = 'zip',
             preprocess_text: Callable = None,
@@ -167,27 +148,8 @@ class Anonymize:
         # if you use word boundaries, you might want to preprocess the
         # strings. You can do this with preprocess text, that function
         # must have at least one argument for the string itself
-        self.preprocess_text = preprocess_text
-        if callable(self.preprocess_text):
-            sig = signature(self.preprocess_text)
-            if len(sig.parameters) == 0:
-                raise ValueError("Preprocess_text must be assigned to a " +
-                                 "function with at least one argument")
-            if len(sig.parameters) > 1:
-                # more than 1 parameter, do the other parameters
-                # have default values?
-                parameters = list(sig.parameters.keys())[1:]
-                pars_without_default = [
-                    sig.parameters[k].default == Parameter.empty
-                    for k in parameters
-                ]
-                if any(pars_without_default):
-                    raise ValueError("""
-                        preprocess_text must be assigned to a function with
-                        one positional argument (the first) that takes a
-                        string, all other arguments must have a default
-                        value.
-                    """)
+        if preprocess_text and self._check_callable(preprocess_text):
+            self.preprocess_text = preprocess_text
 
         self.mapping = None
         self.mapping_is_function = False
@@ -268,7 +230,9 @@ class Anonymize:
         self.csv_handling = CsvHandling()
         self.sheet_source: str
         self.sheet_contents: DataFrame
-        self.date_handling = DateHandling(substitute_dates=substitute_dates)
+
+        if date_replacer and self._check_callable(date_replacer):
+            self.date_replacer = date_replacer
 
         self.stats = {
             "subs_made": 0,
@@ -308,50 +272,6 @@ class Anonymize:
         self.csv_handling.set_spread_sheets_exclude(spread_sheets_exclude)
         self.logger.info("Spreadsheet sheets to exclude: %s",
                          '; '.join(self.csv_handling.sheets_exclude))
-
-    def _convert_csv_to_dict(self, path_to_csv: Union[str, Path]) -> Dict:
-        '''
-        Converts 2-column csv file into dictionary. Left
-        column contains ids, right column contains substitutions.
-        Be aware: by default, DictReader assumes the first row to be
-        fieldnames.
-        '''
-        # this nested function takes care of stripping, escaping and
-        # converting dict keys into regulare expressions
-        def process_key_value_pair(key_value_pair):
-            # convert to list
-            kvp = list(key_value_pair.values())
-            # get key and value
-            key = kvp[0].strip()
-            value = kvp[1].strip()
-            # if key starts with r# then this is a regex
-            if key.startswith('r#'):
-                key = re.compile(key[2:])
-            else:
-                # otherwise, escape key
-                key = re.escape(key)
-            # return
-            return (key, value)
-
-        # read csv file
-        with open(path_to_csv, encoding='utf-8') as file:
-            reader = csv.DictReader(file,
-                                    dialect=self._get_csv_dialect(path_to_csv))
-        # convert ordered dict into a plain dict, strip any white space
-        data = [process_key_value_pair(kvp) for kvp in reader]
-
-        # return ordered dictionary
-        return OrderedDict(data)
-
-    def _reorder_dict(self):
-        '''Re-order the substitution dictionary such that longest keys
-        are processed earlier, regex's come first'''
-        new_dict = sorted(
-            self.mapping.items(),
-            key=lambda t: len(t[0]) if isinstance(t[0], str) else 100000,
-            reverse=True
-        )
-        self.mapping = OrderedDict(new_dict)
 
     def substitute(self,
                    source_path: Union[str, Path],
@@ -399,7 +319,7 @@ class Anonymize:
 
         self.logger.info("%s codes and %s dates replaced in %s files.",
                          self.stats["subs_grand_total"],
-                         self.stats["dates"],
+                         self.date_replacer.replacements_made if self.date_replacer else 0,
                          self.stats["processed_files"])
 
     def substitute_string(self, source: str) -> str:
@@ -412,6 +332,50 @@ class Anonymize:
         new_source = self._substitute_ids(source)
         new_source = self._substitute_dates(new_source)
         return new_source
+
+    def _convert_csv_to_dict(self, path_to_csv: Union[str, Path]) -> Dict:
+        '''
+        Converts 2-column csv file into dictionary. Left
+        column contains ids, right column contains substitutions.
+        Be aware: by default, DictReader assumes the first row to be
+        fieldnames.
+        '''
+        # this nested function takes care of stripping, escaping and
+        # converting dict keys into regulare expressions
+        def process_key_value_pair(key_value_pair):
+            # convert to list
+            kvp = list(key_value_pair.values())
+            # get key and value
+            key = kvp[0].strip()
+            value = kvp[1].strip()
+            # if key starts with r# then this is a regex
+            if key.startswith('r#'):
+                key = re.compile(key[2:])
+            else:
+                # otherwise, escape key
+                key = re.escape(key)
+            # return
+            return (key, value)
+
+        # read csv file
+        with open(path_to_csv, encoding='utf-8') as file:
+            reader = csv.DictReader(file,
+                                    dialect=self._get_csv_dialect(path_to_csv))
+        # convert ordered dict into a plain dict, strip any white space
+        data = [process_key_value_pair(kvp) for kvp in reader]
+
+        # return ordered dictionary
+        return OrderedDict(data)
+
+    def _reorder_dict(self):
+        '''Re-order the substitution dictionary such that longest keys
+        are processed earlier, regex's come first'''
+        new_dict = sorted(
+            self.mapping.items(),
+            key=lambda t: len(t[0]) if isinstance(t[0], str) else 100000,
+            reverse=True
+        )
+        self.mapping = OrderedDict(new_dict)
 
     def _traverse_tree(self, source: Path, target: Path):
         if source.is_file():
@@ -681,7 +645,7 @@ class Anonymize:
                     )
             self.stats["processed_lines"] += 1
 
-        if self.date_handling.substitute_dates:
+        if self.date_replacer:
             # go through all rows
             for index, _ in self.sheet_contents.iterrows():
                 # go through all columns
@@ -774,27 +738,9 @@ class Anonymize:
         self.stats["subs_grand_total"] += num
 
     def _substitute_dates(self, string: str) -> str:
-        if not self.date_handling.substitute_dates:
+        if not self.date_replacer:
             return string
-
-        new_string = string
-
-        for pattern in self.date_handling.patterns:
-            for match in re.finditer(pattern[0], new_string):
-                dtstr = new_string[match.span()[0]:match.span()[1]]
-                if not self.date_handling.substitute_invalid_dates:
-                    try:
-                        dt = dateutil.parser.parse(dtstr.replace("_"," "))
-                    except Exception as e:
-                        continue
-                replace = pattern[1]
-
-                self.stats["dates"] += 1
-
-                new_string = new_string[:match.span()[0]] + replace \
-                             + new_string[match.span()[1]:]
-
-        return new_string
+        return self.date_replacer(string)
 
     # FILE OPERATIONS, OVERRIDE THESE IF APPLICABLE
     def _make_dir(self, path: Path):
@@ -822,3 +768,24 @@ class Anonymize:
     def _copy_file(self, source: Path, target: Path):
         if source != target:
             shutil.copy(source, target)
+
+    def _check_callable(self, function):
+        if not callable(function):
+            raise ValueError(f"{str(function)} not callable")
+
+        sig = signature(function)
+        if len(sig.parameters) == 0:
+            raise ValueError(f"{function.__name__} needs to accept at least one argument")
+        if len(sig.parameters) > 1:
+            # more than 1 parameter, do the other parameters
+            # have default values?
+            parameters = list(sig.parameters.keys())[1:]
+            pars_without_default = [
+                sig.parameters[k].default == Parameter.empty
+                for k in parameters
+            ]
+            if any(pars_without_default):
+                raise ValueError(f"{function.__name__} should take one positional argument \
+                    that takes a string; all other arguments must have a default value.")
+        
+        return True
