@@ -77,24 +77,16 @@ class CsvHandling:
         self.sheets_exclude = sheets_exclude
 
     def set_cols_case_sensitive(self, cols_case_sensitive: bool):
-        if isinstance(cols_case_sensitive, bool):
-            self.cols_case_sensitive = cols_case_sensitive
-        else:
+        if not isinstance(cols_case_sensitive, bool):
             raise ValueError("Expected boolean")
+        self.cols_case_sensitive = cols_case_sensitive
 
     def set_cols_match_style(self, cols_match_style: str):
-        if cols_match_style in self.cols_match_styles:
-            self.cols_match_style = cols_match_style
-        else:
+        if not cols_match_style in self.cols_match_styles:
             raise ValueError("Invalid column match style:" +
                              f"'{cols_match_style}'; " +
                              f"valid values: {'; '.join(self.cols_match_styles)}")
-
-    def set_spread_sheets_pseudonymize(self, spread_sheets_pseudonymize: List[str]):
-        self.spread_sheets_pseudonymize = spread_sheets_pseudonymize
-
-    def set_spread_sheets_exclude(self, spread_sheets_exclude: List[str]):
-        self.spread_sheets_exclude = spread_sheets_exclude
+        self.cols_match_style = cols_match_style
 
     def cols_sanitize(self, cols: List[str]) -> List[str]:
         cols = list(map(lambda x: x.strip(), cols))
@@ -262,15 +254,14 @@ class Anonymize:
         self.logger.info("Column headers match style: %s",
                          self.csv_handling.cols_match_style)
 
-    def set_spread_sheets_pseudonymize(self,
-                                       spread_sheets_pseudonymize: List[str]):
-        self.csv_handling.set_spread_sheets_pseudonymize(spread_sheets_pseudonymize)
-        self.logger.info("Spreadsheet sheets to pseudonymize: %s",
+    def set_sheets_pseudonymize(self, sheets_pseudonymize: List[str]):
+        self.csv_handling.set_sheets_pseudonymize(sheets_pseudonymize)
+        self.logger.info("Spreadsheet sheet(s) to pseudonymize: %s",
                          '; '.join(self.csv_handling.sheets_pseudonymize))
 
-    def set_spread_sheets_exclude(self, spread_sheets_exclude: List[str]):
-        self.csv_handling.set_spread_sheets_exclude(spread_sheets_exclude)
-        self.logger.info("Spreadsheet sheets to exclude: %s",
+    def set_sheets_exclude(self, sheets_exclude: List[str]):
+        self.csv_handling.set_sheets_exclude(sheets_exclude)
+        self.logger.info("Spreadsheet sheet(s) to exclude: %s",
                          '; '.join(self.csv_handling.sheets_exclude))
 
     def substitute(self,
