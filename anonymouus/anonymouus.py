@@ -4,7 +4,6 @@ import shutil
 import tempfile
 import logging
 import os
-import dateutil.parser
 import charset_normalizer
 import pandas as pd
 from pandas import DataFrame
@@ -15,7 +14,7 @@ from typing import List, Callable, Union, Dict, Tuple, Optional
 from itertools import groupby
 from datetime import datetime
 from anonymouus.utils import get_logger
-from anonymouus.date_handler import DateHandler
+from anonymouus.date_replacer import DateReplacer
 
 """
 Documentation items
@@ -122,7 +121,7 @@ class Anonymize:
             pattern: str = None,
             flags=0,
             use_word_boundaries: bool = True,
-            date_handler: DateHandler = None,
+            date_replacer: DateReplacer = None,
             session_id: str = None,
             zip_format: str = 'zip',
             preprocess_text: Callable = None,
@@ -149,27 +148,8 @@ class Anonymize:
         # if you use word boundaries, you might want to preprocess the
         # strings. You can do this with preprocess text, that function
         # must have at least one argument for the string itself
-        self.preprocess_text = preprocess_text
-        if callable(self.preprocess_text):
-            sig = signature(self.preprocess_text)
-            if len(sig.parameters) == 0:
-                raise ValueError("Preprocess_text must be assigned to a " +
-                                 "function with at least one argument")
-            if len(sig.parameters) > 1:
-                # more than 1 parameter, do the other parameters
-                # have default values?
-                parameters = list(sig.parameters.keys())[1:]
-                pars_without_default = [
-                    sig.parameters[k].default == Parameter.empty
-                    for k in parameters
-                ]
-                if any(pars_without_default):
-                    raise ValueError("""
-                        preprocess_text must be assigned to a function with
-                        one positional argument (the first) that takes a
-                        string, all other arguments must have a default
-                        value.
-                    """)
+        if preprocess_text and self._check_callable(preprocess_text):
+            self.preprocess_text = preprocess_text
 
         self.mapping = None
         self.mapping_is_function = False
@@ -250,7 +230,9 @@ class Anonymize:
         self.csv_handling = CsvHandling()
         self.sheet_source: str
         self.sheet_contents: DataFrame
-        self.date_handler = date_handler if callable(date_handler.replace_dates) else False
+
+        if date_replacer and self._check_callable(date_replacer):
+            self.date_replacer = date_replacer
 
         self.stats = {
             "subs_made": 0,
@@ -337,7 +319,7 @@ class Anonymize:
 
         self.logger.info("%s codes and %s dates replaced in %s files.",
                          self.stats["subs_grand_total"],
-                         self.date_handler.replacements_made if self.date_handler else 0,
+                         self.date_replacer.replacements_made if self.date_replacer else 0,
                          self.stats["processed_files"])
 
     def substitute_string(self, source: str) -> str:
@@ -663,7 +645,7 @@ class Anonymize:
                     )
             self.stats["processed_lines"] += 1
 
-        if self.date_handler:
+        if self.date_replacer:
             # go through all rows
             for index, _ in self.sheet_contents.iterrows():
                 # go through all columns
@@ -756,10 +738,9 @@ class Anonymize:
         self.stats["subs_grand_total"] += num
 
     def _substitute_dates(self, string: str) -> str:
-        if not self.date_handler:
+        if not self.date_replacer:
             return string
-        else:
-            return self.date_handler.replace_dates(string)
+        return self.date_replacer(string)
 
     # FILE OPERATIONS, OVERRIDE THESE IF APPLICABLE
     def _make_dir(self, path: Path):
@@ -787,3 +768,24 @@ class Anonymize:
     def _copy_file(self, source: Path, target: Path):
         if source != target:
             shutil.copy(source, target)
+
+    def _check_callable(self, function):
+        if not callable(function):
+            raise ValueError(f"{str(function)} not callable")
+
+        sig = signature(function)
+        if len(sig.parameters) == 0:
+            raise ValueError(f"{function.__name__} needs to accept at least one argument")
+        if len(sig.parameters) > 1:
+            # more than 1 parameter, do the other parameters
+            # have default values?
+            parameters = list(sig.parameters.keys())[1:]
+            pars_without_default = [
+                sig.parameters[k].default == Parameter.empty
+                for k in parameters
+            ]
+            if any(pars_without_default):
+                raise ValueError(f"{function.__name__} should take one positional argument \
+                    that takes a string; all other arguments must have a default value.")
+        
+        return True
