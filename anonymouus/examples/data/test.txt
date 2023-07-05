@@ -1,0 +1,14 @@
+## [view]
+## Date:	06.09.2019 13:51:49
+## IDF Version:	9
+## Sample Rate:	120
+## Separator Type:	Unknown
+## Trial Count:	1
+## Uses Plane File:	False
+## Number of Samples:	12345                                                                                                                                                                                                                                                           
+## Reversed:	none
+## [Run]
+## Subject:	## Description:	                                                                                                                                                                                                                                                                
+## [Calibration]
+## Calibration Type:	5-point
+
